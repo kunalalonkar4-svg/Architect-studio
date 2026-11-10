@@ -78,6 +78,8 @@ export default function Chat({ full, reload, goTab }: Props) {
           <div className="empty-chat">
             <h3>Tell me what you want to build</h3>
             <p className="muted">Plain language is fine — English, Hindi or Hinglish. You can attach a sketch, a PDF or notes (optional). I’ll summarise your brief and ask only what I really need.</p>
+            <QuickStart disabled={busy || archived} onSend={t => send(t)} />
+            <p className="muted">Ya apne shabdon mein likho:</p>
             <div className="chips">{STARTERS.map(s => <button key={s} className="chip" onClick={() => setText(s)}>{s}</button>)}</div>
           </div>
         )}
@@ -209,5 +211,23 @@ export function ProposalCard({ p, full, reload, goTab }: { p: Proposal; full: Fu
       </div>
       {p.blocking.length > 0 && <small className="muted">Blocked by the error above. Ask for a different change.</small>}
     </div>
+  );
+}
+
+function QuickStart({ onSend, disabled }: { onSend: (t: string) => void; disabled: boolean }) {
+  const [w, setW] = useState("30"); const [d, setD] = useState("50"); const [u, setU] = useState("ft"); const [road, setRoad] = useState("east"); const [bed, setBed] = useState("2");
+  const ok = parseFloat(w) > 0 && parseFloat(d) > 0;
+  return (
+    <form className="quick-start" onSubmit={e => { e.preventDefault(); if (ok) onSend(`I have a ${w} ${u} x ${d} ${u} plot, road on the ${road}. ${bed} bedroom${bed === "1" ? "" : "s"}, open kitchen, parking and a staircase.`); }}>
+      <strong>Quick start</strong>
+      <div className="grid2">
+        <label>Plot width<input inputMode="decimal" value={w} onChange={e => setW(e.target.value)} /></label>
+        <label>Plot depth<input inputMode="decimal" value={d} onChange={e => setD(e.target.value)} /></label>
+        <label>Unit<select value={u} onChange={e => setU(e.target.value)}><option value="ft">feet</option><option value="m">metres</option></select></label>
+        <label>Road side<select value={road} onChange={e => setRoad(e.target.value)}>{["north", "east", "south", "west"].map(s => <option key={s}>{s}</option>)}</select></label>
+        <label>Bedrooms<select value={bed} onChange={e => setBed(e.target.value)}><option>1</option><option>2</option></select></label>
+      </div>
+      <button className="btn primary block" disabled={!ok || disabled}>Start my plan</button>
+    </form>
   );
 }

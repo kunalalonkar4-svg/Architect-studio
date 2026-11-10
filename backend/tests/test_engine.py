@@ -129,3 +129,13 @@ def test_mock_does_not_read_bedroom_count_as_setback():
         "setback_front": {"value": 3.0, "unit": "m"}, "setback_rear": {"value": 1.5, "unit": "m"},
         "setback_left": {"value": 0.0, "unit": "m"}, "setback_right": {"value": 0.0, "unit": "m"}}
     assert parse_setbacks("front setback 10 ft")["setback_front"] == {"value": 10.0, "unit": "ft"}
+
+
+def test_estimate_quantities_are_consistent():
+    from app.engine.estimate import estimate
+    m = build_model(brief())
+    e = estimate(m)
+    q = {i["id"]: i["qty"] for i in e["items"]}
+    assert 70 < e["built_up_m2"] < 110 and 0 < e["carpet_m2"] < e["built_up_m2"]
+    assert q["masonry"] > 8 and q["plaster"] > q["masonry"] and q["slab"] == pytest.approx(e["built_up_m2"] * 0.15, rel=0.01)
+    assert q["doors"] > 0 and q["windows"] > 0 and set(e["rates"]) == set(q)

@@ -623,6 +623,16 @@ def create_export(pid: str, b: ExportIn, u: User = Depends(current_user), db: Se
     return dict(job=job_json(db, j))
 
 
+@router.get("/projects/{pid}/estimate")
+def estimate_api(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..engine.estimate import estimate
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to estimate.", ["Generate the layout first"], status=404))
+    return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model)))
+
+
 @router.get("/projects/{pid}/jobs")
 def jobs(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
     p = owned_project(db, u, pid)
