@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, Full } from "./api";
+import { api, download, Full } from "./api";
 import { ErrorBox, Notice, Spinner, toNotice } from "./ui";
 
 interface Item { id: string; name: string; unit: string; qty: number; basis: string }
@@ -96,7 +96,7 @@ function CostView({ full }: { full: Full }) {
         <div className="est-row"><div className="est-name"><strong>Contingency</strong></div><div className="est-qty" /><label className="est-rate">%<input inputMode="decimal" value={cont} onChange={e => setCont(e.target.value)} /></label><div className="est-amt">{inr(c)}</div></div>
         <div className="est-row total"><div className="est-name"><strong>Estimated total</strong><small>≈ {inr(total / (est.built_up_m2 || 1))} per m² built-up</small></div><div className="est-qty" /><div /><div className="est-amt">{inr(total)}</div></div>
       </div>
-      <div className="row"><button className="btn" onClick={csv}>Download CSV</button><button className="btn ghost" onClick={() => { const e = est.rates; setRates(Object.fromEntries(Object.entries(e).map(([k, v]) => [k, String(v)]))); }}>Reset rates</button></div>
+      <div className="row"><button className="btn" onClick={() => download(`/projects/${full.project.id}/estimate.xlsx?cont=${encodeURIComponent(cont)}&rates=${encodeURIComponent(JSON.stringify(Object.fromEntries(Object.entries(rates).map(([k, v]) => [k, parseFloat(v) || 0]))))}`, `${full.project.name}-BOQ-rev${est.revision}.xlsx`)}>Download Excel (BOQ)</button><button className="btn ghost" onClick={csv}>CSV</button><button className="btn ghost" onClick={() => { const e = est.rates; setRates(Object.fromEntries(Object.entries(e).map(([k, v]) => [k, String(v)]))); }}>Reset rates</button></div>
       <p className="fine">{est.disclaimer}</p>
     </div>
   );

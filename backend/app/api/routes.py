@@ -633,6 +633,25 @@ def estimate_api(pid: str, u: User = Depends(current_user), db: Session = Depend
     return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model)))
 
 
+@router.get("/projects/{pid}/estimate.xlsx")
+def estimate_xlsx(pid: str, rates: str = "", cont: float = 5.0, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    import json as _json
+    from fastapi.responses import Response
+    from ..engine.boq_xlsx import build_boq_xlsx
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to estimate.", ["Generate the layout first"], status=404))
+    try:
+        rt = _json.loads(rates) if rates else {}
+        assert isinstance(rt, dict)
+    except Exception:
+        return svc_error(ServiceError("bad_rates", "Rates must be a JSON object of item id to INR rate.", ["Reset the rates and try again"]))
+    data = build_boq_xlsx(ProjectModel.model_validate(rev.model), p.name, rev.number, rt, max(0.0, min(cont, 50.0)), p.client or "", p.address or "")
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="boq-rev{rev.number}.xlsx"'})
+
+
 @router.get("/projects/{pid}/structure")
 def structure_api(pid: str, sbc: float = 150.0, u: User = Depends(current_user), db: Session = Depends(get_db)):
     from ..engine.structural import prelim

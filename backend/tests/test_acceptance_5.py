@@ -219,3 +219,20 @@ def test_layout_engine_sizes_for_many_plots_and_bedroom_counts():
         assert sum(1 for s in m.spaces if s.kind in ("bedroom",)) == beds
     with pytest.raises(ImpossibleLayout):
         build_model(Brief(plot_frontage_mm=40 * 304.8, plot_depth_mm=50 * 304.8, road_side="s", setbacks=Setbacks(front=3000, rear=1500, left=0, right=0), bedrooms=6))
+
+
+def test_boq_excel_is_a_real_workbook_with_formulas_and_user_rates(client, auth):
+    import json
+    import openpyxl
+    from test_acceptance_2_3 import make_project
+    pid = make_project(client, auth, views=None)
+    r = client.get(f"/api/projects/{pid}/estimate.xlsx", params=dict(rates=json.dumps(dict(masonry=9000)), cont=7), headers=auth)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/vnd.openxmlformats")
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    assert wb.sheetnames[:2] == ["Abstract of Cost", "BOQ"] and "Structure (prelim)" in wb.sheetnames
+    boq = wb["BOQ"]
+    rows = [[c.value for c in row] for row in boq.iter_rows(min_row=7)]
+    mas = next(x for x in rows if x[1] and str(x[1]).startswith("Masonry"))
+    assert mas[4] == 9000 and str(mas[5]).startswith("=D")                    # user rate used; amount is a live formula
+    assert "Contingency @ 7%" in [c.value for c in wb["Abstract of Cost"]["B"]]
+    assert client.get(f"/api/projects/{pid}/estimate.xlsx", params=dict(rates="[1]"), headers=auth).status_code == 422
