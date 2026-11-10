@@ -119,9 +119,13 @@ class ExplainValidation(Strict):
     pass
 
 
+class GetQuantities(Strict):
+    pass
+
+
 MODELS = {"update_brief": UpdateBrief, "ask_clarification": AskClarification, "generate_layout": GenerateLayout,
           "propose_options": ProposeOptions, "propose_edit": ProposeEdit, "generate_views": GenerateViews,
-          "request_export": RequestExport, "explain_validation": ExplainValidation}
+          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities}
 
 DESCRIPTIONS = {
     "update_brief": "Record or correct the project brief (plot, road side, open-space/setbacks, rooms, deliverables). Only fields the user actually stated; never invent values. Put each number with its unit.",
@@ -132,6 +136,7 @@ DESCRIPTIONS = {
     "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index). Generate only what the user asked for.",
     "request_export": "Start an export (pdf = vector sheets at exact paper size, dxf = layered model-space CAD, png). Do not say a file is ready until the app confirms.",
     "explain_validation": "Read the current validation issues of the active revision so you can explain them to the user in simple language.",
+    "get_quantities": "Read the computed material quantities, placeholder-rate cost lines and PRELIMINARY structural sizes for the active revision. Use these numbers when the user asks about cost, BOQ, materials, beam/column/footing sizes; never invent quantities.",
 }
 
 

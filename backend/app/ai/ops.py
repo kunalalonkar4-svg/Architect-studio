@@ -56,7 +56,7 @@ def current_revision(ctx: Ctx):
 def execute_tool(ctx: Ctx, name: str, raw: dict) -> Outcome:
     if name not in MODELS:                       # allow-list
         return err("unknown_operation", f"Operation '{name}' is not allowed.")
-    if ctx.project.status == "archived" and name not in ("explain_validation", "ask_clarification"):
+    if ctx.project.status == "archived" and name not in ("explain_validation", "ask_clarification", "get_quantities"):
         return err("project_archived", "This project is archived and read-only.", ["Unarchive the project to continue"])
     try:
         args = MODELS[name].model_validate(raw)
@@ -310,6 +310,16 @@ def op_request_export(ctx: Ctx, a) -> Outcome:
     job = enqueue_export(ctx.db, ctx.project, rev, params)
     return Outcome(dict(ok=True, job_id=job.id, state=job.state, note="Queued. The app confirms when the file exists and passed validation; do not say it is ready."),
                    [dict(type="export", job_id=job.id, format=a.format)])
+
+
+def op_get_quantities(ctx: Ctx, a) -> Outcome:
+    from ..engine.estimate import estimate
+    from ..engine.structural import prelim
+    rev = current_revision(ctx)
+    if not rev:
+        return err("no_model_yet", "There is no drawing yet, so quantities cannot be computed.")
+    model = ProjectModel.model_validate(rev.model)
+    return Outcome(dict(ok=True, revision=rev.number, estimate=estimate(model), structural_preliminary=prelim(model)), [dict(type="info", message="Quantities and preliminary structural sizes are in the Estimate tab.")])
 
 
 def op_explain_validation(ctx: Ctx, a) -> Outcome:

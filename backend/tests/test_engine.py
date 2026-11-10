@@ -139,3 +139,15 @@ def test_estimate_quantities_are_consistent():
     assert 70 < e["built_up_m2"] < 110 and 0 < e["carpet_m2"] < e["built_up_m2"]
     assert q["masonry"] > 8 and q["plaster"] > q["masonry"] and q["slab"] == pytest.approx(e["built_up_m2"] * 0.15, rel=0.01)
     assert q["doors"] > 0 and q["windows"] > 0 and set(e["rates"]) == set(q)
+
+
+def test_structural_prelim_and_detailed_boq():
+    from app.engine.estimate import estimate
+    from app.engine.structural import prelim
+    m = build_model(brief())
+    s = prelim(m)
+    ids = {i["id"]: i for i in s["items"]}
+    assert ids["slab"]["status"] == "ok" and ids["column"]["value"].startswith("230") and "licensed structural engineer" in s["disclaimer"]
+    assert prelim(m, sbc_kn_m2=75)["items"][3]["value"] != ids["footing"]["value"]          # weaker soil -> bigger footing
+    q = {i["id"]: i["qty"] for i in estimate(m)["items"]}
+    assert q["steel"] > 1000 and q["excavation"] > q["pcc"] > 0 and q["sanitary"] >= 1

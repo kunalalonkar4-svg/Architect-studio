@@ -633,6 +633,18 @@ def estimate_api(pid: str, u: User = Depends(current_user), db: Session = Depend
     return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model)))
 
 
+@router.get("/projects/{pid}/structure")
+def structure_api(pid: str, sbc: float = 150.0, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..engine.structural import prelim
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to size.", ["Generate the layout first"], status=404))
+    if not 50 <= sbc <= 600:
+        return svc_error(ServiceError("bad_sbc", "Safe bearing capacity must be between 50 and 600 kN/m².", ["Use the value from your soil test report"]))
+    return dict(revision=rev.number, **prelim(ProjectModel.model_validate(rev.model), sbc_kn_m2=sbc))
+
+
 @router.get("/projects/{pid}/jobs")
 def jobs(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
     p = owned_project(db, u, pid)

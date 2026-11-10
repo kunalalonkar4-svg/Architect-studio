@@ -7,6 +7,50 @@ interface Est { revision: number; currency: string; built_up_m2: number; carpet_
 const inr = (n: number) => "₹ " + Math.round(n).toLocaleString("en-IN");
 
 export default function EstimatePanel({ full }: { full: Full }) {
+  const [view, setView] = useState<"cost" | "structure">("cost");
+  return (
+    <>
+      <div className="panel" style={{ paddingBottom: 0 }}>
+        <div className="seg" role="tablist" aria-label="Estimate sections">
+          <button role="tab" aria-selected={view === "cost"} className={view === "cost" ? "on" : ""} onClick={() => setView("cost")}>Cost (BOQ)</button>
+          <button role="tab" aria-selected={view === "structure"} className={view === "structure" ? "on" : ""} onClick={() => setView("structure")}>Structure (prelim.)</button>
+        </div>
+      </div>
+      {view === "cost" ? <CostView full={full} /> : <StructureView full={full} />}
+    </>
+  );
+}
+
+interface SItem { id: string; name: string; value: string; status: string; basis: string; note: string }
+interface Struct { revision: number; assumptions: Record<string, any>; items: SItem[]; disclaimer: string }
+
+function StructureView({ full }: { full: Full }) {
+  const pid = full.project.id; const revId = full.current?.id;
+  const [sbc, setSbc] = useState("150"); const [d, setD] = useState<Struct | null>(null); const [err, setErr] = useState<Notice | null>(null);
+  useEffect(() => {
+    if (!revId) return; let off = false; setErr(null);
+    const t = setTimeout(() => api<Struct>(`/projects/${pid}/structure?sbc=${encodeURIComponent(sbc)}`).then(x => !off && setD(x)).catch(e => !off && setErr(toNotice(e))), 300);
+    return () => { off = true; clearTimeout(t); };
+  }, [pid, revId, sbc]);
+  if (!full.current) return <div className="empty-pane"><h3>No drawing yet</h3><p className="muted">Generate the drawings first.</p></div>;
+  return (
+    <div className="panel">
+      <h3>Preliminary structure · revision {d?.revision ?? full.current.number}</h3>
+      <div className="banner warn slim">Rough sizes for early planning only. Not a structural design. A licensed structural engineer must design and check everything.</div>
+      <label>Soil safe bearing capacity (kN/m²)<small> — from your soil test; 150 is only an assumption</small><input inputMode="decimal" value={sbc} onChange={e => setSbc(e.target.value)} /></label>
+      <ErrorBox n={err} />
+      {!d && !err && <Spinner label="Calculating…" />}
+      {d && d.items.map(i => (
+        <div className="est-row" key={i.id}>
+          <div className="est-name"><strong>{i.name}</strong><small>{i.basis}</small>{i.note && <small className={i.status === "check" ? "note warn" : ""}>{i.note}</small>}</div>
+          <div className="est-qty">{i.status === "check" ? "⚠ check" : ""}</div><div className="est-amt">{i.value}</div>
+        </div>))}
+      {d && <><p className="fine"><b>Assumed:</b> {Object.entries(d.assumptions).map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(" · ")}</p><p className="fine">{d.disclaimer}</p></>}
+    </div>
+  );
+}
+
+function CostView({ full }: { full: Full }) {
   const pid = full.project.id; const revId = full.current?.id;
   const [est, setEst] = useState<Est | null>(null); const [err, setErr] = useState<Notice | null>(null);
   const [rates, setRates] = useState<Record<string, string>>({}); const [cont, setCont] = useState("10");

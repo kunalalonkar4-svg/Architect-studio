@@ -145,3 +145,22 @@ def test_project_controls(client, auth):
     assert client.delete(f"/api/projects/{pid}", headers=auth).status_code == 200
     assert client.get(f"/api/projects/{pid}", headers=auth).status_code == 404
     assert cur(client, auth, p2["id"])["current"]["sheets"][0]["ready"]
+
+
+def test_estimate_and_structure_endpoints_and_isolation(client, auth):
+    from test_acceptance_2_3 import make_project
+    pid = make_project(client, auth, views=None)
+    e = client.get(f"/api/projects/{pid}/estimate", headers=auth).json()
+    assert e["currency"] == "INR" and any(i["id"] == "steel" for i in e["items"]) and "not market prices" in e["disclaimer"]
+    s = client.get(f"/api/projects/{pid}/structure?sbc=100", headers=auth).json()
+    assert s["assumptions"]["sbc_kn_m2"] == 100 and "licensed structural engineer" in s["disclaimer"]
+    assert client.get(f"/api/projects/{pid}/structure?sbc=5", headers=auth).status_code == 422
+    # another user cannot read them
+    other = make_user(client, "someone-else")
+    for path in ("estimate", "structure"):
+        assert client.get(f"/api/projects/{pid}/{path}", headers=other).status_code == 404
+    # no drawing yet -> clear next step, not a crash
+    from conftest import new_project
+    empty = new_project(client, auth, "blank")
+    r = client.get(f"/api/projects/{empty}/estimate", headers=auth)
+    assert r.status_code == 404 and r.json()["error"]["next_actions"]
