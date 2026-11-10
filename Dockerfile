@@ -14,4 +14,4 @@ COPY backend/ ./
 COPY --from=fe /fe/dist /app/frontend/dist
 ENV FRONTEND_DIR=/app/frontend/dist STORAGE_DIR=/data/storage
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

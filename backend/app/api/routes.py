@@ -286,7 +286,11 @@ def delete_project(pid: str, u: User = Depends(current_user), db: Session = Depe
     db.delete(p); db.commit()
     for k in keys:
         storage.delete(k)
-    shutil.rmtree(settings.storage_dir / "p" / pid, ignore_errors=True)
+    if settings.storage_backend == "db":
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM blobs WHERE key LIKE :p"), dict(p=f"p/{pid}/%")); db.commit()
+    else:
+        shutil.rmtree(settings.storage_dir / "p" / pid, ignore_errors=True)
     return dict(ok=True)
 
 

@@ -11,10 +11,19 @@ def _int(name: str, default: int) -> int:
         return default
 
 
+def _normalize_db_url(u: str) -> str:
+    """Accept the plain postgres:// / postgresql:// string copied from Supabase."""
+    u = u.strip()
+    for pre in ("postgres://", "postgresql://"):
+        if u.startswith(pre):
+            return "postgresql+psycopg://" + u[len(pre):]
+    return u
+
+
 @dataclass
 class Settings:
-    database_url: str = field(default_factory=lambda: os.environ.get(
-        "DATABASE_URL", "postgresql+psycopg://studio:studio@localhost:5432/studio"))
+    database_url: str = field(default_factory=lambda: _normalize_db_url(os.environ.get(
+        "DATABASE_URL", "postgresql+psycopg://studio:studio@localhost:5432/studio")))
     jwt_secret: str = field(default_factory=lambda: os.environ.get("JWT_SECRET", "dev-only-change-me-please-32-bytes!"))
     jwt_hours: int = field(default_factory=lambda: _int("JWT_HOURS", 72))
     anthropic_api_key: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
@@ -27,6 +36,7 @@ class Settings:
     ai_max_tokens: int = field(default_factory=lambda: _int("AI_MAX_TOKENS", 4096))
     ai_daily_request_limit: int = field(default_factory=lambda: _int("AI_DAILY_REQUEST_LIMIT", 200))
     ai_daily_token_limit: int = field(default_factory=lambda: _int("AI_DAILY_TOKEN_LIMIT", 600000))
+    storage_backend: str = field(default_factory=lambda: os.environ.get("STORAGE_BACKEND", "disk"))   # disk | db (db = PostgreSQL bytea; for hosts without persistent disk)
     storage_dir: Path = field(default_factory=lambda: Path(os.environ.get("STORAGE_DIR", "./storage")).resolve())
     max_upload_mb: int = field(default_factory=lambda: _int("MAX_UPLOAD_MB", 10))
     cors_origins: list = field(default_factory=lambda: [o for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o])
