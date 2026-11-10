@@ -45,9 +45,9 @@ def test_impossible_layout_new_plot_and_edit_preserve_work(client, auth):
     _, events, _ = chat(client, auth, pid2, "kitchen width 1000 mm karo")
     e = [x for x in events if x["type"] == "error"]
     assert e and e[0]["code"] == "impossible_layout" and "1900" in e[0]["message"] and e[0]["next_actions"]
-    _, events, _ = chat(client, auth, pid2, "make it 3 bedroom")
+    _, events, _ = chat(client, auth, pid2, "make it 7 bedroom")
     e = [x for x in events if x["type"] == "error"]
-    assert e and "not supported" in e[0]["message"]
+    assert e and "supported" in e[0]["message"]
     d = cur(client, auth, pid2)
     assert len(d["revisions"]) == before and d["current"]["number"] == 1 and not d["proposals"]
 

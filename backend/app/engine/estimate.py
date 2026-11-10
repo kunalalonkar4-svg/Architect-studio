@@ -30,6 +30,8 @@ def estimate(model: ProjectModel) -> dict:
     h_wall = max(lv.height - lv.slab, 0) / 1000.0            # m, masonry height under slab
     ob = model.outer_bounds()
     footprint = (ob[2] - ob[0]) * (ob[3] - ob[1]) / 1e6 if ob else 0.0
+    nlev = len(model.levels)
+    built_up = footprint * nlev
     openings = {w.id: 0.0 for w in model.walls}
     door_a = win_a = 0.0
     nd = nw = 0
@@ -50,9 +52,9 @@ def estimate(model: ProjectModel) -> dict:
         plaster += area * 2
     rooms = [(s, room_metrics(model, s)) for s in model.spaces]
     floor = sum(m["area_m2"] for s, m in rooms if not s.open_boundary)
-    slab_v = footprint * lv.slab / 1000.0
+    slab_v = built_up * lv.slab / 1000.0
     paint = plaster + floor                                   # walls + ceilings (approx.)
-    wall_len = sum(w.length for w in model.walls) / 1000.0
+    wall_len = sum(w.length for w in model.walls if w.level == model.levels[0].id) / 1000.0   # foundations follow ground-floor walls
     trench = wall_len * 0.9 * 1.2                              # 900 mm wide x 1.2 m deep
     pcc = wall_len * 0.9 * 0.1
     found = wall_len * 0.6 * 0.3 + wall_len * 0.23 * 0.3     # footing strip + plinth beam
@@ -63,7 +65,7 @@ def estimate(model: ProjectModel) -> dict:
         dict(id="masonry", name="Masonry (walls)", unit="m³", qty=round(mas, 2), basis="Wall centreline length × thickness × height under slab, less openings"),
         dict(id="plaster", name="Plaster (both faces)", unit="m²", qty=round(plaster, 2), basis="Wall area × 2 faces, less openings"),
         dict(id="flooring", name="Flooring (enclosed rooms)", unit="m²", qty=round(floor, 2), basis="Sum of room clear areas, excluding open porch/parking"),
-        dict(id="slab", name="RCC roof slab", unit="m³", qty=round(slab_v, 2), basis=f"Outer footprint × {lv.slab:.0f} mm slab"),
+        dict(id="slab", name="RCC slabs (floor + roof)" if nlev > 1 else "RCC roof slab", unit="m³", qty=round(slab_v, 2), basis=f"Outer footprint × {nlev} slab(s) × {lv.slab:.0f} mm"),
         dict(id="doors", name=f"Doors ({nd} nos.)", unit="m²", qty=round(door_a, 2), basis="Sum of door opening areas"),
         dict(id="windows", name=f"Windows ({nw} nos.)", unit="m²", qty=round(win_a, 2), basis="Sum of window opening areas"),
         dict(id="paint", name="Interior painting", unit="m²", qty=round(paint, 2), basis="Plastered wall area + ceiling (approx.)"),
@@ -72,9 +74,9 @@ def estimate(model: ProjectModel) -> dict:
         dict(id="foundation", name="RCC footing strip + plinth beam", unit="m³", qty=round(found, 2), basis="Assumed 600×300 strip footing and 230×300 plinth beam along all walls"),
         dict(id="steel", name="Reinforcement steel", unit="kg", qty=round(steel_kg, 0), basis="Rule of thumb: slab 80, foundation 70, beams 120 kg/m³ of concrete (beams assumed at wall lines)"),
         dict(id="waterproof", name="Terrace waterproofing", unit="m²", qty=round(footprint, 2), basis="Outer footprint"),
-        dict(id="electrical", name="Electrical (allowance)", unit="m²", qty=round(footprint, 2), basis="Allowance per m² built-up, replace with a real electrical estimate"),
-        dict(id="plumbing", name="Plumbing (allowance)", unit="m²", qty=round(footprint, 2), basis="Allowance per m² built-up, replace with a real plumbing estimate"),
+        dict(id="electrical", name="Electrical (allowance)", unit="m²", qty=round(built_up, 2), basis="Allowance per m² built-up (all floors), replace with a real electrical estimate"),
+        dict(id="plumbing", name="Plumbing (allowance)", unit="m²", qty=round(built_up, 2), basis="Allowance per m² built-up (all floors), replace with a real plumbing estimate"),
         dict(id="sanitary", name=f"Sanitary fixtures ({toilets} toilet(s))", unit="no.", qty=float(toilets), basis="Allowance per toilet"),
     ]
-    return dict(currency="INR", built_up_m2=round(footprint, 2), carpet_m2=round(floor, 2), items=items, rates=DEFAULT_RATES,
+    return dict(currency="INR", built_up_m2=round(built_up, 2), floors=nlev, carpet_m2=round(floor, 2), items=items, rates=DEFAULT_RATES,
                 disclaimer="Concept-level quantities from the drawing model. Rates are editable placeholders, not market prices or a quotation. Foundation, steel, electrical and plumbing lines are rule-of-thumb allowances, not designed quantities. Excludes site development, boundary wall, lift, furniture, premium finishes, taxes, labour contingencies and site conditions.")

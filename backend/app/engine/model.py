@@ -55,7 +55,7 @@ class Brief(BaseModel):
         if any(v is None for v in (sb.front, sb.rear, sb.left, sb.right)):
             out.append({"id": "setbacks", "question": "Required open space / setbacks on front, rear, left and right (from your local rules)?"})
         if self.bedrooms is None:
-            out.append({"id": "bedrooms", "question": "How many bedrooms on the ground floor?"})
+            out.append({"id": "bedrooms", "question": "How many bedrooms in total (1 to 5)? Say 'duplex' if you want two floors."})
         return out
 
     def ready(self) -> bool:
@@ -198,6 +198,23 @@ class ProjectModel(BaseModel):
 
     def level(self, lid="GF") -> Level:
         return next(l for l in self.levels if l.id == lid)
+
+    @property
+    def top_level(self) -> Level:
+        return self.levels[-1]
+
+    def total_height(self) -> float:
+        t = self.levels[-1]
+        return t.elevation + t.height
+
+    def at_level(self, lid: str) -> "ProjectModel":
+        """Copy of the model holding only one level's spaces, walls, openings and stairs (for per-floor plans)."""
+        m = self.model_copy(deep=False)
+        m.spaces = [x for x in self.spaces if x.level == lid]
+        m.walls = [x for x in self.walls if x.level == lid]
+        m.openings = [x for x in self.openings if x.level == lid]
+        m.stairs = [x for x in self.stairs if x.level == lid]
+        return m
 
     def space(self, sid) -> Optional[Space]:
         return next((s for s in self.spaces if s.id == sid or s.key == sid), None)

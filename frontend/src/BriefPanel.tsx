@@ -19,7 +19,7 @@ export default function BriefPanel({ full, reload, goTab }: { full: Full; reload
     return {
       frontage: fromMm(b.plot_frontage_mm, "ft"), depth: fromMm(b.plot_depth_mm, "ft"),
       front: fromMm(sb.front, "m"), rear: fromMm(sb.rear, "m"), left: fromMm(sb.left, "m"), right: fromMm(sb.right, "m"),
-      road: (b.road_side ? SIDES[b.road_side] ?? b.road_side : "") as string, bedrooms: b.bedrooms == null ? "" : String(b.bedrooms), kitchen: (b.kitchen_type ?? "") as string,
+      road: (b.road_side ? SIDES[b.road_side] ?? b.road_side : "") as string, bedrooms: b.bedrooms == null ? "" : String(b.bedrooms), floors: String(b.levels_now ?? 1), kitchen: (b.kitchen_type ?? "") as string,
       parking: b.parking == null ? "" : b.parking ? "yes" : "no", stairPos: (b.stair_position ?? "front") as string, views: (b.requested_views ?? ["plan"]) as string[], notes: (b.notes ?? "") as string,
     };
   }
@@ -36,6 +36,7 @@ export default function BriefPanel({ full, reload, goTab }: { full: Full; reload
     for (const k of ["front", "rear", "left", "right"] as const) if (dirty.has(k)) p["setback_" + k] = len(f[k]);
     if (dirty.has("road") && f.road) p.road_side = f.road;
     if (dirty.has("bedrooms") && f.bedrooms !== "") p.bedrooms = parseInt(f.bedrooms, 10);
+    if (dirty.has("floors")) p.floors = parseInt(f.floors, 10);
     if (dirty.has("kitchen") && f.kitchen) p.kitchen_type = f.kitchen;
     if (dirty.has("parking") && f.parking) p.parking = f.parking === "yes";
     if (dirty.has("stairPos")) p.stair_position = f.stairPos;
@@ -82,7 +83,8 @@ export default function BriefPanel({ full, reload, goTab }: { full: Full; reload
       </fieldset>
       <fieldset disabled={ro}><legend>Rooms</legend>
         <div className="grid2">
-          <label>Bedrooms<select value={f.bedrooms} onChange={e => set("bedrooms", e.target.value)}><option value="">Choose…</option><option>1</option><option>2</option></select></label>
+          <label>Bedrooms<select value={f.bedrooms} onChange={e => set("bedrooms", e.target.value)}><option value="">Choose…</option>{[1, 2, 3, 4, 5].map(n => <option key={n}>{n}</option>)}</select></label>
+          <label>Floors<select value={f.floors} onChange={e => set("floors", e.target.value)}><option value="1">1 (ground only)</option><option value="2">2 (duplex: ground + first)</option></select></label>
           <label>Kitchen<select value={f.kitchen} onChange={e => set("kitchen", e.target.value)}><option value="">Choose…</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
           <label>Parking<select value={f.parking} onChange={e => set("parking", e.target.value)}><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
           <label>Staircase<select value={f.stairPos} onChange={e => set("stairPos", e.target.value)}><option value="front">Front</option><option value="rear">Rear</option></select></label>

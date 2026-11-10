@@ -181,3 +181,41 @@ def test_structural_layout_sheet_is_drawn_labelled_and_disclaimed(client, auth):
     t = pdf[0].get_text()
     assert "PRELIMINARY - NOT FOR CONSTRUCTION" in t and "licensed structural engineer" in t and "C1" in t and "FOOTINGS" in t
     open("/tmp/structure-sheet.png", "wb").write(pdf[0].get_pixmap(dpi=110).tobytes("png"))
+
+
+def test_duplex_4bhk_from_one_prompt_gives_two_floor_set_and_estimate(client, auth):
+    import pymupdf
+    from conftest import chat, new_project, run_jobs
+    from test_acceptance_2_3 import cur
+    pid = new_project(client, auth, "Duplex")
+    chat(client, auth, pid, "40 by 50 feet east facing plot, 4bhk duplex, front 3 m rear 1.5 m left 0.9 m right 0.9 m, kitchen open, parking. full set of drawings please")
+    run_jobs()
+    d = cur(client, auth, pid)
+    assert d["current"], d["messages"][-1]
+    assert d["brief"]["bedrooms"] == 4 and d["brief"]["levels_now"] == 2
+    kinds = {s["kind"] for s in d["current"]["sheets"]}
+    assert {"plan", "elevations", "section", "roof", "schedules"} <= kinds
+    plan = next(s for s in d["current"]["sheets"] if s["kind"] == "plan")
+    assert plan["ready"]
+    pdf = pymupdf.open(stream=client.get(f"/api/artifacts/{plan['artifacts']['pdf']}/file", headers=auth).content, filetype="pdf")
+    t = pdf[0].get_text()
+    assert "FIRST FLOOR PLAN" in t and "GROUND FLOOR PLAN" in t and "MASTER BEDROOM" in t.upper()
+    est = client.get(f"/api/projects/{pid}/estimate", headers=auth).json()
+    assert est["floors"] == 2 and est["built_up_m2"] > est["carpet_m2"]
+    st = client.get(f"/api/projects/{pid}/structure", headers=auth).json()
+    assert "2 (ground" in st["assumptions"]["storeys"]
+
+
+def test_layout_engine_sizes_for_many_plots_and_bedroom_counts():
+    from app.engine.layout import build_model, ImpossibleLayout
+    from app.engine.model import Brief, Setbacks
+    from app.engine.validate import validate_model
+    for (w, d, beds, fl) in [(30, 50, 2, 1), (30, 50, 3, 2), (40, 50, 4, 2), (40, 60, 5, 2), (35, 60, 3, 1), (50, 80, 4, 2), (30, 50, 2, 2)]:
+        br = Brief(plot_frontage_mm=w * 304.8, plot_depth_mm=d * 304.8, road_side="e", setbacks=Setbacks(front=3000, rear=1500, left=900 if w >= 40 else 0, right=900 if w >= 40 else 0),
+                   bedrooms=beds, levels_now=fl, kitchen_type="open", parking=True)
+        m = build_model(br)
+        errs = [i for i in validate_model(m) if i["severity"] == "error"]
+        assert not errs, (w, d, beds, fl, errs)
+        assert sum(1 for s in m.spaces if s.kind in ("bedroom",)) == beds
+    with pytest.raises(ImpossibleLayout):
+        build_model(Brief(plot_frontage_mm=40 * 304.8, plot_depth_mm=50 * 304.8, road_side="s", setbacks=Setbacks(front=3000, rear=1500, left=0, right=0), bedrooms=6))

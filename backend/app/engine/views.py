@@ -450,14 +450,16 @@ def plan_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     xs, ys = draw_plan_dims(b, model)
     section_marks_plan(b, model)
     ob = model.outer_bounds()
-    b.level_mark(ob[0] + b.p(3), ob[1] - b.p(17), "±0.000 FFL")
+    lvl_el = model.level(vd.level).elevation
+    b.level_mark(ob[0] + b.p(3), ob[1] - b.p(17), "±0.000 FFL" if lvl_el == 0 else f"+{lvl_el/1000:.3f} FFL")
     b.north_arrow(ob[2] + b.p(24), ob[3] + b.p(6))
     b.scale_bar(ob[0], ob[1] - b.p(36), S)
     for fl in project.get("future_levels", []):
         b.text(ob[0], ob[1] - b.p(44), f"Note: {fl} is planned (future). Stair is sized for upward continuation; the upper floor is not drawn.", 1.9, valign="t")
+    plan_title = f"{model.level(vd.level).name.upper()} PLAN"
     meta = dict(openings=[dict(mark=o.mark, type=o.type, width=o.width, height=o.height, sill=o.sill) for o in model.openings if o.host],
                 rooms=rooms, stair=model.stairs[0].flight.model_dump() if model.stairs else None, axes=dict(x=xs, y=ys))
-    return ViewResult(vd.id, f"GROUND FLOOR PLAN", b.prims, bbox_of(b.prims, S), S, meta)
+    return ViewResult(vd.id, plan_title, b.prims, bbox_of(b.prims, S), S, meta)
 
 
 def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewResult:
@@ -484,7 +486,7 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
         if s.kind in ("parking", "sitout"):
             b.rect(s.x, s.y, s.x2, s.y2, "A-SITE-MISC", None, "dash")
             b.text(s.x + s.w / 2, s.y + s.h / 2, s.name.upper(), 2.0, "A-SITE-MISC", "c", "m")
-    b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2, "PROPOSED BUILDING (GROUND FLOOR)", 2.4, "A-ANNO-TEXT", "c", "m", bold=True)
+    b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2, "PROPOSED BUILDING (GROUND FLOOR)" if len(model.levels) == 1 else f"PROPOSED BUILDING (G+{len(model.levels) - 1}, GROUND FLOOR FOOTPRINT)", 2.4, "A-ANNO-TEXT", "c", "m", bold=True)
     b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2 - b.p(3.5), f"Footprint {(ob[2]-ob[0])*(ob[3]-ob[1])/1e6:.1f} m²  |  Plot {PW*PH/1e6:.1f} m²  |  Coverage {(ob[2]-ob[0])*(ob[3]-ob[1])/(PW*PH)*100:.0f}%", 1.9, "A-ANNO-TEXT", "c", "m")
     # road strip on the road side
     rd = b.p(12)
@@ -579,8 +581,9 @@ def _u(facing: str, x: float, y: float) -> float:
 def elevation_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewResult:
     b = B(S)
     f = vd.facing or "s"
-    lv = model.level(vd.level)
+    lv = model.levels[0]
     H, par, plinth = lv.height, lv.parapet, lv.plinth
+    TOP = model.total_height()
     ob = model.outer_bounds()
     u0, u1 = sorted((_u(f, ob[0], ob[1]), _u(f, ob[2], ob[3])))
     if f in ("s", "n"):
@@ -589,10 +592,13 @@ def elevation_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
         us = sorted([_u(f, 0, ob[1]), _u(f, 0, ob[3])])
     u0, u1 = us
     b.rect(u0, -plinth, u1, 0, "A-ELEV-OUT", "light")
-    b.rect(u0, 0, u1, H, "A-ELEV-OUT", None)
-    b.rect(u0 - 40, H, u1 + 40, H + lv.slab * 0, "A-ELEV-OUT", None)
-    b.rect(u0, H, u1, H + par, "A-ELEV-OUT", None)
-    b.line(u0 - 40, H, u1 + 40, H, "A-ELEV-OUT", w=0.45)
+    b.rect(u0, 0, u1, TOP, "A-ELEV-OUT", None)
+    b.rect(u0 - 40, TOP, u1 + 40, TOP + lv.slab * 0, "A-ELEV-OUT", None)
+    b.rect(u0, TOP, u1, TOP + par, "A-ELEV-OUT", None)
+    b.line(u0 - 40, TOP, u1 + 40, TOP, "A-ELEV-OUT", w=0.45)
+    for lx in model.levels[1:]:   # intermediate floor slab lines
+        b.line(u0 - 40, lx.elevation, u1 + 40, lx.elevation, "A-ELEV-OUT", w=0.35)
+        b.line(u0, lx.elevation - lx.slab, u1, lx.elevation - lx.slab, "A-ELEV-OUT", "dash", w=0.15)
     b.line(u0 - b.p(25), -plinth, u1 + b.p(25), -plinth, "A-ELEV-GRND")
     marks = []
     # open bays (porch / parking) on this facade
@@ -608,16 +614,23 @@ def elevation_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
             a, c = sorted((_u(f, 0, s.y), _u(f, 0, s.y2)))
         else:
             a, c = sorted((_u(f, s.x, 0), _u(f, s.x2, 0)))
-        b.rect(a, 0, c, H - 500, "A-ELEV-OPEN", None, "dash")
-        b.line(a, H - 500, c, H - 500, "A-ELEV-OPEN", w=0.3)
-        b.text((a + c) / 2, H / 2, s.name.upper() + " (OPEN)", 1.9, "A-ANNO-TEXT", "c", "m")
+        z0 = model.level(s.level).elevation
+        if s.kind == "balcony":
+            b.rect(a, z0, c, z0 + 1000, "A-ELEV-OPEN", None, "dash")
+            b.line(a, z0 + 1000, c, z0 + 1000, "A-ELEV-OPEN", w=0.3)
+            b.text((a + c) / 2, z0 + 500, s.name.upper() + " (OPEN, RAILING)", 1.6, "A-ANNO-TEXT", "c", "m")
+        else:
+            b.rect(a, z0, c, z0 + H - 500, "A-ELEV-OPEN", None, "dash")
+            b.line(a, z0 + H - 500, c, z0 + H - 500, "A-ELEV-OPEN", w=0.3)
+            b.text((a + c) / 2, z0 + H / 2, s.name.upper() + " (OPEN)", 1.9, "A-ANNO-TEXT", "c", "m")
     for w in _facade(model, f):
         for o in model.openings:
             if o.host != w.id:
                 continue
             uc = _u(f, o.cx, o.cy)
             a, c = uc - o.width / 2, uc + o.width / 2
-            z0, z1 = o.sill, o.sill + o.height
+            el = model.level(o.level).elevation
+            z0, z1 = o.sill + el, o.sill + el + o.height
             if o.type == "window":
                 b.rect(a - 40, z0 - 40, c + 40, z1 + 40, "A-ELEV-OPEN", None)
                 b.rect(a, z0, c, z1, "A-ELEV-OPEN", "glass")
@@ -633,18 +646,22 @@ def elevation_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
             marks.append(dict(mark=o.mark, type=o.type, width=o.width, height=o.height, sill=o.sill))
     # level marks and dims
     xr = u1 + b.p(16)
-    for z, lab in ((-plinth, f"GL  -{plinth/1000:.3f}"), (0, "FFL  ±0.000"), (H, f"ROOF SLAB  +{H/1000:.3f}"), (H + par, f"PARAPET TOP  +{(H+par)/1000:.3f}")):
+    marks_z = [(-plinth, f"GL  -{plinth/1000:.3f}"), (0, "FFL  ±0.000")]
+    marks_z += [(lx.elevation, f"{lx.name.upper()}  +{lx.elevation/1000:.3f}") for lx in model.levels[1:]]
+    marks_z += [(TOP, f"ROOF SLAB  +{TOP/1000:.3f}"), (TOP + par, f"PARAPET TOP  +{(TOP+par)/1000:.3f}")]
+    for z, lab in marks_z:
         b.level_mark(xr - b.p(2), z, lab)
         b.line(u1 + b.p(1), z, xr - b.p(6), z, "A-ANNO-DIMS", "dash", w=0.08)
     xd = u0 - b.p(12)
     b.dim_v(-plinth, 0, u0, xd, f"{plinth:.0f}")
-    b.dim_v(0, H, u0, xd, f"{H:.0f}")
-    b.dim_v(H, H + par, u0, xd, f"{par:.0f}")
+    for lx in model.levels:
+        b.dim_v(lx.elevation, lx.elevation + lx.height, u0, xd, f"{lx.height:.0f}")
+    b.dim_v(TOP, TOP + par, u0, xd, f"{par:.0f}")
     b.dim_h(u0, u1, -plinth, -plinth - b.p(10), f"{u1-u0:.0f}")
     b.scale_bar(u0, -plinth - b.p(26), S)
     nm = SIDE_NAMES[f].upper()
     road = " (ROAD SIDE)" if model.plot and model.plot["road_side"] == f else ""
-    return ViewResult(vd.id, f"{nm} ELEVATION{road}", b.prims, bbox_of(b.prims, S), S, dict(facing=f, openings=marks, width=u1 - u0, height=H + par))
+    return ViewResult(vd.id, f"{nm} ELEVATION{road}", b.prims, bbox_of(b.prims, S), S, dict(facing=f, openings=marks, width=u1 - u0, height=TOP + par))
 
 
 def default_sections(model: ProjectModel) -> list[dict]:
@@ -665,8 +682,9 @@ def section_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> Vie
     b = B(S)
     cut = vd.cut
     axis, at, look, lab = cut["axis"], cut["at"], cut["look"], cut.get("label", "A")
-    lv = model.level(vd.level)
-    H, slab, plinth, par = lv.height, lv.slab, lv.plinth, lv.parapet
+    lv = model.levels[0]
+    slab, plinth, par = lv.slab, lv.plinth, lv.parapet
+    H = model.total_height()           # top of roof slab
     ob = model.outer_bounds()
     # along-view coordinate
     if axis == "x":   # plane x=at, line runs along y
@@ -680,6 +698,8 @@ def section_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> Vie
     b.line(lo - b.p(15), -plinth, hi + b.p(15), -plinth, "A-ELEV-GRND")
     b.rect(lo, -150, hi, 0, "A-SECT-CUT", "wall")
     b.rect(lo, H - slab, hi, H, "A-SECT-CUT", "wall")
+    for lx in model.levels[1:]:
+        b.rect(lo, lx.elevation - lx.slab, hi, lx.elevation, "A-SECT-CUT", "wall")
     cut_walls = []
     for w in model.walls:
         if w.horizontal:
@@ -700,19 +720,19 @@ def section_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> Vie
         if (axis == "x" and not w.horizontal) or (axis == "y" and w.horizontal):
             continue
         t2 = w.thickness / 2
-        segs = [(-plinth, H - slab)]
+        wl = model.level(w.level)
+        bottom, top = (-plinth if wl.elevation == 0 else wl.elevation), wl.elevation + wl.height - wl.slab
+        segs = [(bottom, top)]
         for o in model.openings:
             if o.host == w.id:
-                inside = (min(w.x1, w.x2) <= at and False)
                 pos = o.cx if w.horizontal else o.cy
-                along = at if w.horizontal else at
                 if abs(pos - at) <= o.width / 2:
-                    z0, z1 = o.sill, o.sill + o.height
-                    segs = [(-plinth, z0 if z0 > 0 else -plinth), (z1, H - slab)]
+                    z0, z1 = o.sill + wl.elevation, o.sill + wl.elevation + o.height
+                    segs = [(bottom, z0 if o.sill > 0 else bottom), (z1, top)]
                     segs = [(a, c_) for a, c_ in segs if c_ - a > 1]
         for z0, z1 in segs:
             b.rect(c - t2, z0, c + t2, z1, "A-SECT-CUT", "wall")
-        if w.kind == "ext":
+        if w.kind == "ext" and wl.id == model.levels[-1].id:
             b.rect(c - t2, H, c + t2, H + par, "A-SECT-CUT", "wall")
         cut_walls.append(dict(wall=w.id, u=round(c, 1), t=w.thickness))
     # openings cut by the plane (window/door heads and sills shown)
@@ -731,10 +751,12 @@ def section_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> Vie
         else:
             a2, c2 = sorted((U(x0, 0), U(x1, 0)))
         mid = (a2 + c2) / 2
-        b.text(mid, H / 2 + b.p(3), s.name.upper(), 2.1, "A-ANNO-TEXT", "c", "b", bold=True)
-        b.text(mid, H / 2 - b.p(1), f"{c2 - a2:.0f} clear", 1.7, "A-ANNO-TEXT", "c", "b")
+        sl = model.level(s.level)
+        zc = sl.elevation + sl.height / 2
+        b.text(mid, zc + b.p(3), s.name.upper(), 2.1, "A-ANNO-TEXT", "c", "b", bold=True)
+        b.text(mid, zc - b.p(1), f"{c2 - a2:.0f} clear", 1.7, "A-ANNO-TEXT", "c", "b")
         rooms.append(dict(key=s.key, a=round(a2, 1), c=round(c2, 1)))
-        b.line(a2, H - slab, c2, H - slab, "A-SECT-BEYOND", "dash")
+        b.line(a2, sl.elevation + sl.height - sl.slab, c2, sl.elevation + sl.height - sl.slab, "A-SECT-BEYOND", "dash")
         # stair steps if the plane crosses the stair run
         st = model.stairs[0] if model.stairs else None
         if st and s.id == st.space_id and st.flight:
@@ -765,18 +787,22 @@ def section_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> Vie
                 b.poly(pts, "A-STAIR", False, None)
     # level marks / dims
     xr = hi + b.p(18)
-    for z, lb in ((-plinth, f"GL  -{plinth/1000:.3f}"), (0, "FFL  ±0.000"), (H - slab, f"SOFFIT  +{(H-slab)/1000:.3f}"), (H, f"ROOF SLAB  +{H/1000:.3f}"), (H + par, f"PARAPET  +{(H+par)/1000:.3f}")):
+    mk = [(-plinth, f"GL  -{plinth/1000:.3f}"), (0, "FFL  ±0.000")]
+    mk += [(lx.elevation, f"{lx.name.upper()}  +{lx.elevation/1000:.3f}") for lx in model.levels[1:]]
+    mk += [(H - slab, f"SOFFIT  +{(H-slab)/1000:.3f}"), (H, f"ROOF SLAB  +{H/1000:.3f}"), (H + par, f"PARAPET  +{(H+par)/1000:.3f}")]
+    for z, lb in mk:
         b.level_mark(xr - b.p(2), z, lb)
         b.line(hi + b.p(1), z, xr - b.p(6), z, "A-ANNO-DIMS", "dash", w=0.08)
     xd = lo - b.p(12)
     b.dim_v(-plinth, 0, lo, xd, f"{plinth:.0f}")
-    b.dim_v(0, H - slab, lo, xd, f"{H - slab:.0f}")
-    b.dim_v(H - slab, H, lo, xd, f"{slab:.0f}")
+    for lx in model.levels:
+        b.dim_v(lx.elevation, lx.elevation + lx.height - lx.slab, lo, xd, f"{lx.height - lx.slab:.0f}")
+        b.dim_v(lx.elevation + lx.height - lx.slab, lx.elevation + lx.height, lo, xd, f"{lx.slab:.0f}")
     b.dim_v(H, H + par, lo, xd, f"{par:.0f}")
     b.dim_h(lo, hi, -plinth, -plinth - b.p(10), f"{hi - lo:.0f}")
     b.scale_bar(lo, -plinth - b.p(26), S)
     return ViewResult(vd.id, f"SECTION {lab}-{lab}", b.prims, bbox_of(b.prims, S), S,
-                      dict(label=lab, axis=axis, at=at, cut_walls=cut_walls, rooms=rooms, height=H, clear_height=H - slab))
+                      dict(label=lab, axis=axis, at=at, cut_walls=cut_walls, rooms=rooms, height=H, clear_height=lv.height - slab))
 
 
 # ---------------- tables (paper units, not to scale) -----------------------
@@ -955,4 +981,8 @@ BUILDERS = dict(plan=plan_view, site=site_view, roof=roof_view, elevation=elevat
 
 
 def build_view(model: ProjectModel, vd: ViewDef, S: int, project: dict | None = None) -> ViewResult:
+    if vd.type == "plan":
+        model = model.at_level(vd.level)
+    elif vd.type == "structure":
+        model = model.at_level(model.levels[0].id)
     return BUILDERS[vd.type](model, vd, S, project or {})

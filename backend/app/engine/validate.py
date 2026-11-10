@@ -117,8 +117,9 @@ def check_agreement(model: ProjectModel, metas: dict[str, dict]) -> list[dict]:
             continue
         if vd.type == "plan":
             got = {x["mark"]: tup(x) for x in m["openings"]}
-            if got != truth:
-                out.append(issue("view_mismatch", "error", f"Plan {vid} disagrees with the model for openings: {sorted(set(got.items()) ^ set(truth.items()))[:3]}"))
+            truth_l = {o.mark: truth[o.mark] for o in model.openings if o.host and o.level == vd.level}
+            if got != truth_l:
+                out.append(issue("view_mismatch", "error", f"Plan {vid} disagrees with the model for openings: {sorted(set(got.items()) ^ set(truth_l.items()))[:3]}"))
         elif vd.type == "openings":
             got = {x["mark"]: tup(x) for x in m["rows"]}
             if got != truth:

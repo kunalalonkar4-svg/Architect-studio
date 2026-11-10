@@ -17,9 +17,11 @@ from .ops import Ctx, execute_tool
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT
 from .provider import ProviderError, detect_lang, get_provider
 
-CAPABILITIES = ("Implemented engine: ground-floor plan for 1-2 bedrooms with parking/sit-out, entry, toilet, store/study, dining passage, "
-                "open or closed kitchen and a dog-leg stair (front or rear position); site plan, floor plan, roof plan, 4 elevations, "
-                "section, schedules, drawing index. Additional levels are NOT generated yet. Free-form room placement is not supported; "
+CAPABILITIES = ("Implemented engine: 1 to 5 bedrooms on any plot size. One floor holds 1-2 bedrooms; 3+ bedrooms or 'duplex' gives a ground + first floor "
+                "house (set floors=2). Ground floor: parking/sit-out, entry, living, dining passage, open or closed kitchen, toilet, store, dog-leg stair; "
+                "first floor: master bedroom with attached toilet, family lounge, more bedrooms with a shared toilet, balcony. "
+                "Drawings: site plan, ground and first floor plans, roof plan, 4 elevations, section, schedules, preliminary structural layout, drawing index. "
+                "Quantities and cost (get_quantities) cover all floors. More than two floors and free-form room placement are not supported; "
                 "layout edits are made through the allow-listed operations.")
 MAX_ATTACH_MODEL_BYTES = 5 * 1024 * 1024
 

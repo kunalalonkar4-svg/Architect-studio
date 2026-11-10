@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from . import storage
 from .engine import layout as L
-from .engine.edits import apply_edits, diff_models
+from .engine.edits import apply_edits, diff_models, plan_sheet_title, plan_view_defs
 from .engine.model import Brief, ProjectModel, SheetDef, ViewDef, SIDE_FROM_NAME, digest
 from .engine.sheets import (PAPERS, SCALES, TABLE_KINDS, SheetOverflow, compose_sheet, paper_size, sheet_signature)
 from .engine.validate import validate_model
@@ -62,9 +62,13 @@ def ensure_sheet(model: ProjectModel, kind: str, paper: str | None = None, scale
     number, title, dscale = SHEET_KINDS[kind]
     sid = f"sheet-{kind}"
     vids: list[str] = []
-    if kind in ("plan", "site", "roof", "structure"):
+    if kind == "plan":
+        for vd in plan_view_defs(model):
+            _put_view(model, vd); vids.append(vd.id)
+        title = plan_sheet_title(model)
+    elif kind in ("site", "roof", "structure"):
         vid = f"v-{kind}"
-        _put_view(model, ViewDef(id=vid, type=kind)); vids = [vid]
+        _put_view(model, ViewDef(id=vid, type=kind, level=model.levels[-1].id if kind == "roof" else "GF")); vids = [vid]
     elif kind == "elevations":
         fs = [facing_of(model, f) for f in (facings or ["front", "rear", "left", "right"])]
         for f in dict.fromkeys(fs):

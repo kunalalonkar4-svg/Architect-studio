@@ -67,23 +67,58 @@ def effective_setbacks(brief: Brief, use_assumptions: bool):
     return sb, source, assumptions
 
 
+MAX_BEDROOMS = 5
+
+
+def plan_floors(brief: Brief) -> tuple[int, int, int, list[Assumption]]:
+    """(floors, ground-floor bedrooms, first-floor bedrooms, notes). One floor holds up to 2 bedrooms;
+    3+ bedrooms or an explicit duplex gives a ground + first floor house."""
+    B = brief.bedrooms if brief.bedrooms is not None else 2
+    notes: list[Assumption] = []
+    if B < 1 or B > MAX_BEDROOMS:
+        raise ImpossibleLayout([f"{B} bedrooms is outside the supported range (1 to {MAX_BEDROOMS})"],
+                               [f"Choose between 1 and {MAX_BEDROOMS} bedrooms"])
+    floors = max(1, int(brief.levels_now or 1))
+    if floors > 2:
+        raise ImpossibleLayout([f"{floors} floors requested; the layout engine generates up to ground + first floor (duplex)"],
+                               ["Choose a duplex (ground + first floor)", "Ask for the third floor as a future level"])
+    if B >= 3 and floors == 1:
+        floors = 2
+        notes.append(Assumption(id="duplex_auto", text=f"{B} bedrooms do not fit one floor of this plot concept, so the house is planned as a duplex (ground + first floor).", kind="assumed"))
+    if floors == 1:
+        return 1, B, 0, notes
+    g = 1 if B <= 4 else 2
+    g = min(g, B)
+    return 2, g, B - g, notes
+
+
 def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dict | None = None,
                 use_assumptions: bool = False, roof_approved: bool = False,
                 keep: ProjectModel | None = None) -> ProjectModel:
     if not (brief.plot_frontage_mm and brief.plot_depth_mm and brief.road_side):
         raise ImpossibleLayout(["Plot size and road side are required"], ["Provide plot size and the road-facing side"])
-    bedrooms = brief.bedrooms if brief.bedrooms is not None else 2
-    if bedrooms not in (1, 2):
-        raise ImpossibleLayout([f"{bedrooms} bedrooms are not supported by the implemented layout engine (1 or 2 on the ground floor)"],
-                               ["Choose 1 or 2 bedrooms for now", "Ask for additional bedrooms on a future floor (not yet generated)"])
+    floors, gf_beds, ff_beds, floor_notes = plan_floors(brief)
+    bedrooms = gf_beds
     sb, source, asm = effective_setbacks(brief, use_assumptions)
+    asm = asm + floor_notes
+    fresh = params is None
     p = (params or LayoutParams()).model_copy(deep=True)
-    if params is None:
+    if fresh:
         p.stair_position = brief.stair_position
+    if floors == 2 and p.stair_position != "front":
+        p.stair_position = "front"
+        asm.append(Assumption(id="stair_front", text="Duplex uses the front stair position so the upper floor can be planned around it.", kind="assumed"))
     W, D = brief.plot_frontage_mm, brief.plot_depth_mm
     ext_t, int_t = p.ext_t, p.int_t
     BW = W - sb["left"] - sb["right"] - ext_t
     BD = D - sb["front"] - sb["rear"] - ext_t
+    if fresh:   # scale rooms with the plot instead of leaving one fixed template size
+        extra_w = max(0.0, BW - 9500.0)
+        p.bed1_w = 3300.0 + 0.4 * extra_w
+        p.kitchen_w = 2800.0 + 0.2 * extra_w if BW >= 9500 else None
+        extra_d = max(0.0, BD - 10500.0)
+        p.front_band = min(6000.0, 4600.0 + 0.3 * extra_d)
+        p.rear_row = min(4200.0, 2900.0 + 0.3 * extra_d)
     reasons, sugg = [], []
     parking_w = p.parking_w if brief.parking is not False else p.parking_w
     colw = p.col_w_front if p.stair_position == "front" else p.col_w_rear
@@ -104,20 +139,23 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
     if bed2_w < 3300:
         reasons.append(f"Bedroom 2 width {bed2_w:.0f} mm is below 3300 mm needed to reach its door from the dining passage")
         sugg.append("Reduce kitchen or bedroom 1 width")
+    if floors == 2 and BW - 1500.0 < 6000.0:
+        reasons.append(f"Building width {BW:.0f} mm is too narrow for two bedrooms and a toilet side by side on the first floor")
+        sugg.append("Use a wider plot or reduce side open space")
     if reasons:
         raise ImpossibleLayout(reasons, sugg)
 
-    L = []  # (key,name,kind,x,y,w,h,open_to,open_boundary)
-    def add(key, name, kind, x, y, w, h, open_to=(), ob=False):
-        L.append(dict(key=key, name=name, kind=kind, x=x, y=y, w=w, h=h, open_to=list(open_to), open_boundary=ob))
+    L = []  # (key,name,kind,x,y,w,h,open_to,open_boundary,level)
+    def add(key, name, kind, x, y, w, h, open_to=(), ob=False, lvl="GF"):
+        L.append(dict(key=key, name=name, kind=kind, x=x, y=y, w=w, h=h, open_to=list(open_to), open_boundary=ob, level=lvl))
 
     par = BW - parking_w
+    mid_x = BW - p.stair_w
     if p.stair_position == "front":
         LW = BW - parking_w - colw
         add("living", "Living / Dining", "living", 0, 0, LW, F, ["dining", "entry", "stair"])
         add("entry", "Entry", "entry", LW, 0, colw, 1600, ["living"])
         add("stair", "Staircase", "stair", LW, 1600, colw, F - 1600, ["living", "dining"])
-        mid_x = BW - p.stair_w
         add("dining", "Dining / Passage", "dining", 0, F, mid_x, MR, ["living", "kitchen", "stair"] if brief.kitchen_type != "closed" else ["living", "stair"])
         add("toilet", "Toilet", "toilet", mid_x, F, p.stair_w, 1800)
         add("store", "Store", "store", mid_x, F + 1800, p.stair_w, MR - 1800)
@@ -126,7 +164,6 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
         add("living", "Living / Dining", "living", 0, 0, LW, F, ["dining", "entry"])
         add("entry", "Entry", "entry", LW, 0, colw, 2400, ["living"])
         add("toilet", "Toilet", "toilet", LW, 2400, colw, F - 2400)
-        mid_x = BW - p.stair_w
         add("dining", "Dining / Passage", "dining", 0, F, mid_x, MR, ["living", "kitchen", "stair"] if brief.kitchen_type != "closed" else ["living", "stair"])
         add("stair", "Staircase", "stair", mid_x, F, p.stair_w, MR, ["dining"])
     pk_name, pk_kind = ("Car Parking", "parking") if brief.parking is not False else ("Sit-out", "sitout")
@@ -139,28 +176,61 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
     else:
         add("bed2", "Study", "study", bed1_w + kw, ry, bed2_w, RR)
 
+    # ---- first floor (duplex)
+    ff = {}
+    if floors == 2:
+        rear_beds = max(ff_beds - 1, 0)
+        names = [f"Bedroom {i}" for i in range(gf_beds + 2, gf_beds + 2 + rear_beds)]
+        slots = [(n, "bedroom") for n in names]
+        fillers = [("Study", "study"), ("Family Room", "living")]
+        while len(slots) < 2:
+            slots.append(fillers.pop(0))
+        wa = (BW - 1500.0) / 2
+        add("f_bed1", "Master Bedroom" if ff_beds >= 1 else "Family Room", "bedroom" if ff_beds >= 1 else "living", 0, 0, LW, F, lvl="FF")
+        add("f_toilet1", "Toilet (attached)", "toilet", LW, 0, colw, 1600, lvl="FF")
+        add("f_stair", "Staircase", "stair", LW, 1600, colw, F - 1600, ["f_lounge"], lvl="FF")
+        add("f_balcony", "Balcony", "balcony", par, 0, parking_w, F, ob=True, lvl="FF")
+        add("f_lounge", "Family Lounge", "dining", 0, F, mid_x, MR, ["f_stair"], lvl="FF")
+        add("f_toilet", "Toilet", "toilet", mid_x, F, p.stair_w, 1800, lvl="FF")
+        add("f_store", "Store", "store", mid_x, F + 1800, p.stair_w, MR - 1800, lvl="FF")
+        add("f_roomA", slots[0][0], slots[0][1], 0, ry, wa, RR, lvl="FF")
+        add("f_toilet2", "Toilet", "toilet", wa, ry, 1500.0, RR, lvl="FF")
+        add("f_roomC", slots[1][0], slots[1][1], wa + 1500.0, ry, wa, RR, lvl="FF")
+        for k in ("f_roomA", "f_roomC"):
+            d = next(x for x in L if x["key"] == k)
+            lo, hi = max(d["x"], 0.0) + 450.0, min(d["x"] + d["w"], mid_x) - 450.0
+            if hi - lo < 0:
+                raise ImpossibleLayout([f"{d['name']} on the first floor cannot reach the lounge passage on a building this narrow"],
+                                       ["Use a wider plot", "Reduce side open space"])
+            ff[k] = (lo + hi) / 2
+    lvl_ids = ["GF", "FF"][:floors]
+    lv_h = p.level_height
+
     pt, vec, PWw, PHh = local_to_world(brief.road_side, W, D)
     bx0, by0 = sb["left"] + ext_t / 2, sb["front"] + ext_t / 2
     spaces = []
     for i, d in enumerate(L):
         x1, y1 = pt(bx0 + d["x"], by0 + d["y"])
         x2, y2 = pt(bx0 + d["x"] + d["w"], by0 + d["y"] + d["h"])
-        spaces.append(Space(id=f"S{i+1:02d}", key=d["key"], name=d["name"], kind=d["kind"],
+        spaces.append(Space(id=f"S{i+1:02d}", level=d["level"], key=d["key"], name=d["name"], kind=d["kind"],
                             x=min(x1, x2), y=min(y1, y2), w=abs(x2 - x1), h=abs(y2 - y1),
                             open_to=d["open_to"], open_boundary=d["open_boundary"]))
     p.kitchen_w = kw   # freeze: later edits keep the kitchen size unless it is edited explicitly
-    lv = Level(height=p.level_height)
+    levels = [Level(id="GF", name="Ground Floor", elevation=0.0, height=lv_h)]
+    if floors == 2:
+        levels.append(Level(id="FF", name="First Floor", elevation=lv_h, height=lv_h))
+    lv = levels[0]
     model = ProjectModel(plot=dict(w=PWw, h=PHh, frontage=W, depth=D, road_side=brief.road_side,
                                    setbacks=sb, setback_source=source, local_origin=[bx0, by0], bw=BW, bd=BD),
-                         levels=[lv], spaces=spaces, params=p, opening_overrides=dict(overrides or {}),
+                         levels=levels, spaces=spaces, params=p, opening_overrides=dict(overrides or {}),
                          assumptions=list(brief.assumptions) + asm, roof_approved=roof_approved)
     # openings (local description -> world)
     def S(key): return next(d for d in L if d["key"] == key)
     ops: list[dict] = []
-    def door(key, u, v, w, swing, hinge="start", note=""):
-        ops.append(dict(key=key, type="door", u=u, v=v, width=w, height=2100.0, sill=0.0, swing=swing, hinge=hinge, note=note))
-    def win(key, u, v, w, h, sill, note=""):
-        ops.append(dict(key=key, type="window", u=u, v=v, width=w, height=h, sill=sill, swing=(0, 1), hinge="start", note=note))
+    def door(key, u, v, w, swing, hinge="start", note="", level="GF"):
+        ops.append(dict(key=key, type="door", u=u, v=v, width=w, height=2100.0, sill=0.0, swing=swing, hinge=hinge, note=note, level=level))
+    def win(key, u, v, w, h, sill, note="", level="GF"):
+        ops.append(dict(key=key, type="window", u=u, v=v, width=w, height=h, sill=sill, swing=(0, 1), hinge="start", note=note, level=level))
     en = S("entry")
     door("entry", en["x"] + en["w"] / 2, 0, 1000 if en["w"] >= 1500 else 900, (0, 1), "start", "Main entrance")
     b1 = S("bed1"); b2 = S("bed2"); k = S("kitchen"); lv_ = S("living"); dn = S("dining")
@@ -186,6 +256,31 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
             win("toilet_vent", BW, tl["y"] + 900, 600.0, 450.0, 1500.0, "Ventilator")
     order_d = ["entry", "bed1_door", "bed2_door", "toilet_door", "store_door", "kitchen_door"]
     order_w = ["living_window", "bed1_window", "kitchen_window", "bed2_window", "bed1_side_window", "bed2_side_window", "toilet_vent"]
+    if floors == 2:
+        FL = "FF"
+        A, C, T2 = S("f_roomA"), S("f_roomC"), S("f_toilet2")
+        door("f_master_door", LW / 2, F, 900, (0, -1), "start", level=FL)
+        door("f_toilet1_door", LW, 800, 750, (1, 0), level=FL)
+        door("f_balcony_door", par, 1600 + (F - 1600) / 2, 900, (1, 0), "start", "Balcony", level=FL)
+        door("f_toilet_door", mid_x, F + 900, 750, (1, 0), level=FL)
+        door("f_store_door", mid_x, F + 1800 + (MR - 1800) / 2, 800, (1, 0), level=FL)
+        door("f_roomA_door", ff["f_roomA"], ry, 900, (0, 1), "start", level=FL)
+        door("f_toilet2_door", min(T2["x"] + 750.0, mid_x - 450.0), ry, 750, (0, 1), "start", level=FL)
+        door("f_roomC_door", ff["f_roomC"], ry, 900, (0, 1), "end", level=FL)
+        win("f_master_window", LW / 2, 0, min(1500.0, LW - 800), 1200.0, 900.0, level=FL)
+        win("f_toilet1_window", LW + colw / 2, 0, 600.0, 450.0, 1500.0, "Ventilator", level=FL)
+        win("f_roomA_window", A["x"] + A["w"] / 2, BD, 1500.0, 1200.0, 900.0, level=FL)
+        win("f_toilet2_window", T2["x"] + T2["w"] / 2, BD, 600.0, 450.0, 1500.0, "Ventilator", level=FL)
+        win("f_roomC_window", C["x"] + C["w"] / 2, BD, 1500.0, 1200.0, 900.0, level=FL)
+        if sb["left"] >= 900:
+            win("f_master_side_window", 0, F / 2, 1200.0, 1200.0, 900.0, "Side window (left open space)", level=FL)
+            win("f_roomA_side_window", 0, ry + RR / 2, 1200.0, 1200.0, 900.0, "Side window (left open space)", level=FL)
+        if sb["right"] >= 900:
+            win("f_roomC_side_window", BW, ry + RR / 2, 1200.0, 1200.0, 900.0, "Side window (right open space)", level=FL)
+            win("f_toilet_vent", BW, F + 900, 600.0, 450.0, 1500.0, "Ventilator", level=FL)
+        order_d += ["f_master_door", "f_toilet1_door", "f_balcony_door", "f_toilet_door", "f_store_door", "f_roomA_door", "f_toilet2_door", "f_roomC_door"]
+        order_w += ["f_master_window", "f_toilet1_window", "f_roomA_window", "f_toilet2_window", "f_roomC_window",
+                    "f_master_side_window", "f_roomA_side_window", "f_roomC_side_window", "f_toilet_vent"]
     di = wi = 0
     for o in sorted(ops, key=lambda o: (0 if o["type"] == "door" else 1, (order_d if o["type"] == "door" else order_w).index(o["key"]))):
         if o["type"] == "door":
@@ -195,7 +290,7 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
         wx, wy = pt(bx0 + o["u"], by0 + o["v"])
         sx, sy = vec(*o["swing"])
         ov = (overrides or {}).get(o["key"], {})
-        op = Opening(id=f"O-{o['key']}", key=o["key"], mark=mark, type=o["type"], cx=wx, cy=wy,
+        op = Opening(id=f"O-{o['key']}", key=o["key"], mark=mark, level=o["level"], type=o["type"], cx=wx, cy=wy,
                      width=ov.get("width", o["width"]), height=ov.get("height", o["height"]),
                      sill=ov.get("sill", o["sill"]), swing=[sx, sy], hinge=ov.get("hinge", o["hinge"]), note=o["note"])
         sh = ov.get("shift", 0.0)
@@ -205,12 +300,16 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
             else:
                 op.cx += sh
         model.openings.append(op)
-    # stair
+    # stairs (one per floor; the lower flight is shared)
     sp = model.space("stair")
     fl = stair_flight(sp.w, sp.h, lv.height)
     sv = vec(0, 1) if p.stair_position == "front" else vec(0, -1)
     run = "y" if sp.h >= sp.w else "x"
     model.stairs.append(Stair(space_id=sp.id, x=sp.x, y=sp.y, w=sp.w, h=sp.h, run_axis=run, flight=fl, start=[float(sv[0]), float(sv[1])]))
+    if floors == 2:
+        sp2 = model.space("f_stair")
+        model.stairs.append(Stair(id="ST2", level="FF", space_id=sp2.id, x=sp2.x, y=sp2.y, w=sp2.w, h=sp2.h, run_axis=run,
+                                  flight=fl, start=[float(sv[0]), float(sv[1])]))
     refresh_walls(model)
     return model
 
@@ -225,7 +324,7 @@ def _space_at(spaces, x, y):
 def derive_walls(model: ProjectModel) -> list[Wall]:
     ext_t, int_t = model.params.ext_t, model.params.int_t
     segs = []   # (orient, c, a, b, kind)
-    for lvl in {s.level for s in model.spaces}:
+    for lvl in [l.id for l in model.levels if any(s.level == l.id for s in model.spaces)]:
         sps = [s for s in model.spaces if s.level == lvl]
         for orient in ("h", "v"):
             lines: dict[float, list] = {}
@@ -296,11 +395,11 @@ def refresh_walls(model: ProjectModel) -> None:
         o.host = w.id if w else None
         # which spaces does the host wall separate?
         if w:
-            m = (o.cx, o.cy)
+            sl = [x for x in model.spaces if x.level == o.level]
             if w.horizontal:
-                a, b = _space_at(model.spaces, o.cx, o.cy - 1), _space_at(model.spaces, o.cx, o.cy + 1)
+                a, b = _space_at(sl, o.cx, o.cy - 1), _space_at(sl, o.cx, o.cy + 1)
             else:
-                a, b = _space_at(model.spaces, o.cx - 1, o.cy), _space_at(model.spaces, o.cx + 1, o.cy)
+                a, b = _space_at(sl, o.cx - 1, o.cy), _space_at(sl, o.cx + 1, o.cy)
             o.from_space, o.to_space = (a.key if a else None), (b.key if b else None)
 
 

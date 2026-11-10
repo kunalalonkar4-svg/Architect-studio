@@ -33,6 +33,7 @@ class UpdateBrief(Strict):
     setback_left: Optional[Length] = None
     setback_right: Optional[Length] = None
     bedrooms: Optional[int] = None
+    floors: Optional[int] = None
     kitchen_type: Optional[Literal["open", "closed"]] = None
     parking: Optional[bool] = None
     stair: Optional[bool] = None
@@ -86,6 +87,7 @@ class EditItem(Strict):
     shift: Optional[Length] = None
     hinge: Optional[Literal["start", "end"]] = None
     bedrooms: Optional[int] = None
+    floors: Optional[int] = None
     kitchen_type: Optional[Literal["open", "closed"]] = None
     parking: Optional[bool] = None
 

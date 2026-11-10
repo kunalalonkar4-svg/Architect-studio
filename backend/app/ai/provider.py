@@ -85,7 +85,9 @@ def detect_lang(text: str) -> str:
 
 SIDES = {"east": "east", "west": "west", "north": "north", "south": "south", "purab": "east", "poorab": "east", "paschim": "west", "uttar": "north", "dakshin": "south",
          "पूर्व": "east", "पश्चिम": "west", "उत्तर": "north", "दक्षिण": "south"}
-NUMW = {"one": 1, "two": 2, "three": 3, "ek": 1, "do": 2, "teen": 3, "एक": 1, "दो": 2, "तीन": 3}
+FULLSET_RE = re.compile(r"full\s*(drawing\s*)?set|complete\s*(drawing\s*)?set|drawing\s*set|poora\s*set|pure\s*drawings?|saare\s*drawings|all\s*drawings|coordinated|sab\s*kuch|everything|har\s*ek\s*chij")
+FULL_SET_KINDS = ["site", "plan", "roof", "elevations", "section", "schedules", "structure", "index"]
+NUMW = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "ek": 1, "do": 2, "teen": 3, "char": 4, "chaar": 4, "paanch": 5, "panch": 5, "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5}
 SPACE_RE = r"(kitchen|rasoi|bedroom\s*[12]|bed\s*[12]|master(?:\s*bedroom)?|living(?:\s*room)?|hall|dining|toilet|bathroom|washroom|parking|garage|stair(?:case)?)"
 UNIT_RE = r"(mm|cm|meters?|metres?|mtrs?|m|feet|foot|ft|inch(?:es)?|in|'|\")"
 
@@ -170,10 +172,12 @@ class MockProvider:
         for w, s in SIDES.items():
             if re.search(rf"\b{w}\b[\s\-]*(facing|face|mukhi|taraf|side|road)|(road|facing)\W+(on\s+)?(the\s+)?{w}\b|{w}[\s\-]+facing", t) or (w in text and re.search("facing|मुखी|मुख", text) and w in text):
                 bf["road_side"] = s
-        m = re.search(r"(\d+|one|two|three|ek|do|teen|एक|दो|तीन)\s*(?:bhk|bedrooms?|bed\s?rooms?|kamre|kamra|बेडरूम)", t)
+        m = re.search(r"(\d+|one|two|three|four|five|ek|do|teen|char|chaar|paanch|panch|एक|दो|तीन|चार|पांच)\s*(?:bhk|bedrooms?|bed\s?rooms?|kamre|kamra|बेडरूम)", t)
         if m:
             v = m.group(1)
             bf["bedrooms"] = int(v) if v.isdigit() else NUMW.get(v, 2)
+        if re.search(r"duplex|g\s*\+\s*1|double[\s\-]*stor(?:e)?y|two[\s\-]*(?:floor|storey|story)|2[\s\-]*(?:floor|storey|story)s?|do\s*manzil|do\s*floor", t):
+            bf["floors"] = 2
         if re.search(r"open[\s\-]*kitchen|open[\s\-]*rasoi", t): bf["kitchen_type"] = "open"
         if re.search(r"closed[\s\-]*kitchen|band\s+kitchen|separate\s+kitchen", t): bf["kitchen_type"] = "closed"
         if re.search(r"parking|garage", t): bf["parking"] = not re.search(r"no\s+parking|parking\s+nahi|without\s+parking", t)
@@ -201,7 +205,7 @@ class MockProvider:
         if not has_road:
             qs.append(dict(id="road_side", question=T["q_road"], options=["north", "east", "south", "west"]))
         if not has_beds:
-            qs.append(dict(id="bedrooms", question=T["q_beds"], options=["1", "2"]))
+            qs.append(dict(id="bedrooms", question=T["q_beds"], options=["1", "2", "3", "4", "5"]))
         if qs:
             calls.append(("ask_clarification", dict(questions=qs)))
             return (pre or T["need"]), calls
@@ -216,6 +220,8 @@ class MockProvider:
                                                           dict(label="Option B: stair in the rear band", stair_position="rear", tradeoff=T["tr_rear"])], use_assumptions=not all_sb)))
             return pre + " " + T["opts"], calls
         calls.append(("generate_layout", dict(use_assumptions=not all_sb)))
+        if FULLSET_RE.search(t):
+            calls.append(("generate_views", dict(views=[dict(kind=k) for k in FULL_SET_KINDS])))
         return pre + " " + T["gen"], calls
 
     def _model_intents(self, text, t, st, lang):
@@ -239,8 +245,8 @@ class MockProvider:
         if re.search(r"roof|terrace|chhat", t): kinds.append("roof")
         if re.search(r"structur|column|footing|foundation|beam", t): kinds.append("structure")
         if re.search(r"drawing index|cover sheet|\bindex\b|general notes", t): kinds.append("index")
-        if re.search(r"full set|complete set|poora set|saare drawings|all drawings|coordinated", t):
-            kinds = ["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
+        if FULLSET_RE.search(t):
+            kinds = list(FULL_SET_KINDS)
         if kinds:
             return T["views"], [("generate_views", dict(views=[dict(kind=k) for k in dict.fromkeys(kinds)]))]
         if re.search(r"validat|check|issues?|problem|galat|errors?", t):
@@ -272,7 +278,7 @@ class MockProvider:
         m = re.search(rf"(floor|storey|story)\s*height[^0-9]{{0,15}}(\d+(?:\.\d+)?)\s*{UNIT_RE}?", t)
         if m and not edits:
             edits.append(dict(op="set_level_height", height=_len(m.group(2), m.group(3))))
-        m = re.search(r"(\d+|one|two|ek|do)\s*(?:bedrooms?|bhk)", t)
+        m = re.search(r"(\d+|one|two|three|four|five|ek|do|teen|char|chaar)\s*(?:bedrooms?|bhk)", t)
         if m and not edits:
             v = m.group(1); edits.append(dict(op="set_brief", bedrooms=int(v) if v.isdigit() else NUMW.get(v, 2)))
         if edits:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 
 from .layout import ImpossibleLayout, build_model
+from .model import ViewDef
 from .model import Brief, ProjectModel, Setbacks
 
 ALIASES = {
@@ -116,7 +117,32 @@ def apply_edits(brief: Brief, model: ProjectModel, ops: list[dict], use_assumpti
                                ["Allow the room to change", "Cancel this edit"])
     if new.stairs and new.sheets:
         _retarget_section(new)
+    sync_level_views(new)
     return brief, new, notes
+
+
+def plan_sheet_title(model: ProjectModel) -> str:
+    return "Ground Floor Plan" if len(model.levels) == 1 else "Floor Plans"
+
+
+def plan_view_defs(model: ProjectModel) -> list[ViewDef]:
+    return [ViewDef(id="v-plan" if lv.id == "GF" else f"v-plan-{lv.id}", type="plan", level=lv.id) for lv in model.levels]
+
+
+def sync_level_views(model: ProjectModel) -> None:
+    """Keep per-floor plan views and the roof view in step with the number of levels."""
+    ids = {l.id for l in model.levels}
+    want = plan_view_defs(model)
+    model.views = [v for v in model.views if not (v.type == "plan" and v.level not in ids)]
+    have = {v.id for v in model.views}
+    model.views += [v for v in want if v.id not in have]
+    for sd in model.sheets:
+        if sd.kind == "plan":
+            sd.views = [v.id for v in want]
+            sd.title = plan_sheet_title(model)
+    for v in model.views:
+        if v.type == "roof":
+            v.level = model.levels[-1].id
 
 
 def _retarget_section(model: ProjectModel):

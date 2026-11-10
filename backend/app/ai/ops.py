@@ -19,7 +19,7 @@ from ..units import AmbiguousUnit, to_mm
 from .tools import MODELS
 
 GEOMETRIC = {"plot_frontage", "plot_depth", "road_side", "setback_front", "setback_rear", "setback_left", "setback_right",
-             "bedrooms", "kitchen_type", "parking"}
+             "bedrooms", "floors", "kitchen_type", "parking"}
 
 
 @dataclass
@@ -92,6 +92,7 @@ def op_update_brief(ctx: Ctx, a) -> Outcome:
         # a design already exists: geometry changes become a reviewed proposal, not a silent overwrite
         fields = {}
         if a.bedrooms is not None: fields["bedrooms"] = a.bedrooms
+        if a.floors is not None: fields["levels_now"] = a.floors
         if a.kitchen_type: fields["kitchen_type"] = a.kitchen_type
         if a.parking is not None: fields["parking"] = a.parking
         sb = {k: v for k, v in sbs.items() if v is not None}
@@ -123,6 +124,7 @@ def op_update_brief(ctx: Ctx, a) -> Outcome:
             setattr(brief.setbacks, k, v)
     _apply_soft_fields(brief, a)
     if a.bedrooms is not None: brief.bedrooms = a.bedrooms
+    if a.floors is not None: brief.levels_now = a.floors
     if a.kitchen_type: brief.kitchen_type = a.kitchen_type
     if a.parking is not None: brief.parking = a.parking
     if a.stair is not None: brief.stair = a.stair
@@ -248,6 +250,7 @@ def _edit_to_ops(items) -> list[dict]:
         elif e.op == "set_brief":
             f = {}
             if e.bedrooms is not None: f["bedrooms"] = e.bedrooms
+            if e.floors is not None: f["levels_now"] = e.floors
             if e.kitchen_type: f["kitchen_type"] = e.kitchen_type
             if e.parking is not None: f["parking"] = e.parking
             ops.append(dict(op="set_brief", fields=f))
