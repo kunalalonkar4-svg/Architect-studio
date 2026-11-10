@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: drafta
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL        # Supabase: Project Settings > Database > Connection string (Session pooler), as postgresql+psycopg://...
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        sync: false
+      - key: CORS_ORIGINS
+        value: ""
+    disk:
+      name: drafta-files
+      mountPath: /data
+      sizeGB: 5

@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    environment: { POSTGRES_USER: studio, POSTGRES_PASSWORD: studio, POSTGRES_DB: studio }
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U studio"], interval: 3s, retries: 20 }
+  app:
+    build: .
+    depends_on: { db: { condition: service_healthy } }
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://studio:studio@db:5432/studio
+    ports: ["8000:8000"]
+    volumes: [files:/data/storage]
+    # Scale background work separately if needed: set RUN_WORKER_IN_API=0 and add a service running `python -m app.jobs`.
+volumes: { dbdata: {}, files: {} }

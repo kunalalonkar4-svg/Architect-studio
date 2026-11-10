@@ -1,0 +1,6 @@
+node_modules
+frontend/dist
+storage
+.env
+__pycache__
+.pytest_cache
