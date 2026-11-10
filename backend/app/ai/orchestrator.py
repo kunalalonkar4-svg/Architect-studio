@@ -61,7 +61,7 @@ def project_context(db: Session, project: Project) -> dict:
 
 def build_messages(db: Session, project: Project, user_text: str, attach_blocks: list[dict], exclude_id: str | None = None) -> list[dict]:
     """Context, history and the user message are separate parts of the request."""
-    hist = list(db.scalars(select(Message).where(Message.project_id == project.id, Message.status == "done", Message.id != (exclude_id or "")).order_by(Message.created_at.desc()).limit(12)))
+    hist = list(db.scalars(select(Message).where(Message.project_id == project.id, Message.status == "done", Message.id != (exclude_id or "")).order_by(Message.created_at.desc()).limit(40)))
     hist.reverse()
     msgs: list[dict] = []
     for m in hist:

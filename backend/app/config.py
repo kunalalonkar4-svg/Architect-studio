@@ -34,7 +34,7 @@ class Settings:
     ai_timeout_s: int = field(default_factory=lambda: _int("AI_TIMEOUT_S", 60))
     ai_max_retries: int = field(default_factory=lambda: _int("AI_MAX_RETRIES", 2))
     ai_max_rounds: int = field(default_factory=lambda: _int("AI_MAX_ROUNDS", 8))
-    ai_max_tokens: int = field(default_factory=lambda: _int("AI_MAX_TOKENS", 4096))
+    ai_max_tokens: int = field(default_factory=lambda: _int("AI_MAX_TOKENS", 16000))
     ai_daily_request_limit: int = field(default_factory=lambda: _int("AI_DAILY_REQUEST_LIMIT", 200))
     ai_daily_token_limit: int = field(default_factory=lambda: _int("AI_DAILY_TOKEN_LIMIT", 600000))
     storage_backend: str = field(default_factory=lambda: os.environ.get("STORAGE_BACKEND", "disk"))   # disk | db (db = PostgreSQL bytea; for hosts without persistent disk)
