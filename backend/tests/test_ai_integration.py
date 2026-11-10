@@ -95,7 +95,7 @@ def test_request_shape_and_tool_execution(client, auth, live_fake):
     assert c0["system"] == SYSTEM_PROMPT                                    # fixed server-owned prompt, byte for byte
     assert c0["model"] == "claude-test-model"
     names = [t["name"] for t in c0["tools"]]
-    assert set(names) == set(MODELS) and all(t.get("strict") is True for t in c0["tools"])
+    assert set(names) == set(MODELS) - {"generate_layout", "propose_options"} and "design_floor_plan" in names and all(t.get("strict") is True for t in c0["tools"])
     assert all(t["input_schema"].get("additionalProperties") is False for t in c0["tools"])
     # context, history and user message are separate blocks; API key never appears in the request
     first = c0["messages"][0]
@@ -174,3 +174,62 @@ def test_system_prompt_is_versioned_and_never_sent_to_browser(client, auth):
     assert "architect with 30+ years" not in client.get(f"/api/projects/{pid}", headers=auth).text
     openapi = client.get("/api/openapi.json").text
     assert "30+ years" not in openapi
+
+
+def _plan_20x40(drop_store=False):
+    R = lambda k, n, kind, x, y, w, h, l="GF": dict(key=k, name=n, kind=kind, level=l, x=x, y=y, w=w, h=h)
+    rooms = [R("living", "Living", "living", 0, 0, 3600, 3000), R("sitout", "Sit-out", "sitout", 3600, 0, 2250, 3000),
+             R("kitchen", "Kitchen", "kitchen", 0, 3000, 1800, 2800), R("dining", "Dining", "dining", 1800, 3000, 4050, 2800),
+             R("bed1", "Bedroom 1", "bedroom", 0, 5800, 2925, 3650), R("bed2", "Bedroom 2", "bedroom", 2925, 5800, 2925, 2200),
+             R("toilet", "Toilet", "toilet", 2925, 8000, 1375, 1450)]
+    conns = [dict(a="living", b="dining", type="open"), dict(a="kitchen", b="dining", type="open"), dict(a="living", b="sitout", type="door"),
+             dict(a="bed1", b="dining", type="door"), dict(a="bed2", b="dining", type="door"), dict(a="bed2", b="toilet", type="door")]
+    if not drop_store:
+        rooms.append(R("store", "Store", "store", 4300, 8000, 1550, 1450)); conns.append(dict(a="bed2", b="store", type="door"))
+    return dict(summary="Compact 2BHK for a 20 x 40 ft plot", rooms=rooms, connections=conns, entry_room="living")
+
+
+def test_claude_designs_a_20x40_plan_and_fixes_server_reported_problems(client, auth, live_fake):
+    pid = new_project(client, auth, "Narrow plot")
+    brief = dict(plot_frontage=dict(value=20, unit="ft"), plot_depth=dict(value=40, unit="ft"), road_side="south", bedrooms=2,
+                 setback_front=dict(value=1.5, unit="m"), setback_rear=dict(value=1.0, unit="m"), setback_left=dict(value=0, unit="m"), setback_right=dict(value=0, unit="m"))
+    live_fake.rounds[:] = [
+        [tu("t1", "update_brief", brief)],
+        [tu("t2", "design_floor_plan", _plan_20x40(drop_store=True))],       # leaves a hole
+        [tu("t3", "design_floor_plan", _plan_20x40())],
+        [dict(type="text", text="Plan bana diya.")],
+    ]
+    chat(client, auth, pid, "20 by 40 feet ka plot, 2 bedroom")
+    run_jobs()
+    sink = live_fake.sink
+    assert any("envelope_mm" in json.dumps(c["messages"]) for c in sink)            # Claude is told the buildable envelope
+    third = json.dumps(sink[2]["messages"])
+    assert "Gap on the ground floor" in json.dumps(sink[3]["messages"]) and "width_x" in third                                      # the server's exact problem was returned to Claude
+    d = cur(client, auth, pid)
+    assert d["current"] and d["current"]["number"] == 1
+    plan = next(s for s in d["current"]["sheets"] if s["kind"] == "plan")
+    assert plan["ready"]
+    from app.models import Revision
+    # the plan itself is stored so Claude can revise it later
+    assert d["brief"]["bedrooms"] == 2
+
+
+def test_claude_revises_a_designed_plan_through_a_confirmed_proposal(client, auth, live_fake):
+    pid = new_project(client, auth, "Revise")
+    brief = dict(plot_frontage=dict(value=20, unit="ft"), plot_depth=dict(value=40, unit="ft"), road_side="south", bedrooms=2,
+                 setback_front=dict(value=1.5, unit="m"), setback_rear=dict(value=1.0, unit="m"), setback_left=dict(value=0, unit="m"), setback_right=dict(value=0, unit="m"))
+    live_fake.rounds[:] = [[tu("a", "update_brief", brief)], [tu("b", "design_floor_plan", _plan_20x40())], [dict(type="text", text="Done.")]]
+    chat(client, auth, pid, "20x40 ft, 2 bedroom"); run_jobs()
+    revised = _plan_20x40()
+    t = next(r for r in revised["rooms"] if r["key"] == "toilet"); st = next(r for r in revised["rooms"] if r["key"] == "store")
+    t["w"], st["x"], st["w"] = 1500, 4425, 1425                                    # bigger toilet, smaller store
+    prov._provider_cache.clear()
+    live_fake.rounds[:] = [[tu("c", "design_floor_plan", revised)], [dict(type="text", text="Proposal ready.")]]
+    chat(client, auth, pid, "toilet thoda bada karo"); run_jobs()
+    d = cur(client, auth, pid)
+    assert d["proposals"] and d["current"]["number"] == 1                         # nothing changes until the user confirms
+    r = client.post(f"/api/proposals/{d['proposals'][0]['id']}/confirm", json={}, headers=auth)
+    assert r.status_code == 200, r.text
+    run_jobs()
+    d = cur(client, auth, pid)
+    assert d["current"]["number"] == 2

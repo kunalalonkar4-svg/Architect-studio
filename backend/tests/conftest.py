@@ -7,6 +7,7 @@ import uuid
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg://studio:studio@localhost:5432/studio_test")
 os.environ["AI_PROVIDER"] = "mock"
 os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["ALLOW_TEMPLATE_DEMO"] = "1"
 os.environ["RUN_WORKER_IN_API"] = "0"
 _tmp = tempfile.mkdtemp(prefix="studio-test-")
 os.environ["STORAGE_DIR"] = _tmp

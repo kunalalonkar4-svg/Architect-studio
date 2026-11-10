@@ -133,8 +133,17 @@ def op_update_brief(ctx: Ctx, a) -> Outcome:
     ev = [dict(type="brief", brief=brief.model_dump(), missing=brief.missing())]
     if amb:
         ev.append(dict(type="clarification", questions=_amb_questions(amb)))
-    return Outcome(dict(ok=True, brief=brief.model_dump(), missing=brief.missing(), ambiguous_dimensions=amb,
-                        note="Dimensions without a unit were NOT stored; ask the user for the unit." if amb else ""), ev)
+    res = dict(ok=True, brief=brief.model_dump(), missing=brief.missing(), ambiguous_dimensions=amb,
+               note="Dimensions without a unit were NOT stored; ask the user for the unit." if amb else "")
+    if brief.plot_frontage_mm and brief.plot_depth_mm and brief.road_side:
+        try:
+            from ..engine.plan import envelope
+            bw, bd, sb, src, _ = envelope(brief, True)
+            res["envelope_mm"] = dict(width_x=bw, depth_y=bd, setbacks_used=sb, assumed_setbacks=[k for k, v in src.items() if v == "assumed"],
+                                      note="Design rooms inside x 0..width_x, y 0..depth_y (y=0 is the road side), wall centrelines, multiples of 25 mm.")
+        except Exception:
+            pass
+    return Outcome(res, ev)
 
 
 def _apply_soft_fields(brief: Brief, a):
@@ -188,6 +197,36 @@ def op_generate_layout(ctx: Ctx, a) -> Outcome:
                         assumptions=[x.text for x in model.assumptions if x.kind == "assumed"], validation=[i["message"] for i in rev.validation if i["severity"] != "info"][:6],
                         render="queued; the app will confirm when the drawing exists"),
                    [_rev_event(rev)])
+
+
+def op_design_floor_plan(ctx: Ctx, a) -> Outcome:
+    from ..engine.plan import PlanConn, PlanRoom, PlanSpec, build_model_from_plan, envelope
+    rev = current_revision(ctx)
+    brief = Brief.model_validate((rev.brief if rev else ctx.project.brief) or {})
+    missing = [m for m in brief.missing() if m["id"] not in ("setbacks",)]
+    if missing:
+        return err("missing_inputs", "Essential inputs are missing: " + ", ".join(m["question"] for m in missing), [m["question"] for m in missing], dict(missing=missing))
+    sb_missing = any(v is None for v in brief.setbacks.model_dump().values())
+    use_asm = bool(a.use_assumptions) or ctx.project.use_assumptions
+    if sb_missing and not use_asm:
+        return err("missing_setbacks", "Required open spaces / setbacks are not provided. Provide them or choose to proceed with clearly labelled concept assumptions.",
+                   ["Provide front / rear / left / right open space", "Proceed with concept assumptions"], dict(assumption_defaults=dict(front=3000, rear=1500, left=0, right=0)))
+    plan = PlanSpec(rooms=[PlanRoom(**r.model_dump()) for r in a.rooms], connections=[PlanConn(**c.model_dump()) for c in a.connections],
+                    entry_room=a.entry_room, rationale=a.summary)
+    if rev:
+        return _make_edit_proposal(ctx, rev, [dict(op="replace_plan", plan=plan.model_dump())], [], a.summary)
+    model = build_model_from_plan(brief, plan, use_assumptions=use_asm)
+    errors = [i for i in validate_model(model) if i["severity"] == "error"]
+    if errors:
+        return err("plan_has_errors", "The plan was built but has errors: " + "; ".join(e["message"] for e in errors[:6]),
+                   [e["fix"] or e["message"] for e in errors[:6]], dict(issues=errors))
+    if sb_missing and a.use_assumptions:
+        ctx.project.use_assumptions = True
+    prepare_sheets(ctx, model, brief, [dict(kind=k) for k in (brief.requested_views or ["plan"])])
+    new = create_revision(ctx.db, ctx.project, ctx.user, brief, model, "Initial concept layout (designed room by room)")
+    return Outcome(dict(ok=True, revision=new.number, rooms=_room_dims(model), assumptions=[x.text for x in model.assumptions if x.kind == "assumed"],
+                        validation=[i["message"] for i in new.validation if i["severity"] != "info"][:8],
+                        render="queued; the app will confirm when the drawing exists"), [_rev_event(new)])
 
 
 def _room_dims(model: ProjectModel):

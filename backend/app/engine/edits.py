@@ -54,8 +54,16 @@ def apply_edits(brief: Brief, model: ProjectModel, ops: list[dict], use_assumpti
     notes: list[str] = []
     preserve = [resolve_space(p) for p in (preserve or [])]
     BW = model.plot["bw"]
+    from .plan import PlanSpec, build_model_from_plan
+    plan_obj = PlanSpec.model_validate(model.plan) if model.plan else None
     for op in ops:
         kind = op.get("op")
+        if kind == "replace_plan":
+            plan_obj = PlanSpec.model_validate(op["plan"]); overrides = {}
+            continue
+        if plan_obj is not None and kind not in ("set_opening", "set_level_height", "set_brief"):
+            raise EditError("plan_model", "This house was designed room by room, so that quick edit is not available. Describe the change and I will redesign the plan.",
+                            ["Ask for the change in words (e.g. make bedroom 2 bigger, move the stair)"])
         if kind == "move_stair":
             pos = op["position"]
             if pos not in ("front", "rear"):
@@ -104,7 +112,10 @@ def apply_edits(brief: Brief, model: ProjectModel, ops: list[dict], use_assumpti
         else:
             raise EditError("unknown_op", f"Unsupported edit '{kind}'.")
     try:
-        new = build_model(brief, params, overrides, use_assumptions=use_assumptions, roof_approved=model.roof_approved)
+        if plan_obj is not None:
+            new = build_model_from_plan(brief, plan_obj, params, overrides, use_assumptions=use_assumptions, roof_approved=model.roof_approved)
+        else:
+            new = build_model(brief, params, overrides, use_assumptions=use_assumptions, roof_approved=model.roof_approved)
     except ImpossibleLayout:
         raise
     new.views, new.sheets = copy.deepcopy(model.views), copy.deepcopy(model.sheets)

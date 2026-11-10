@@ -215,6 +215,8 @@ class MockProvider:
                 q.append(dict(id="orientation", question=T["q_orient"], options=["Yes", "No, swap them"]))
             calls.append(("ask_clarification", dict(questions=q)))
             return pre or T["need"], calls
+        if not settings.allow_template_demo:
+            return pre + " " + T["nokey"], calls
         if wants_opts:
             calls.append(("propose_options", dict(options=[dict(label="Option A: stair beside the entry", stair_position="front", tradeoff=T["tr_front"]),
                                                           dict(label="Option B: stair in the rear band", stair_position="rear", tradeoff=T["tr_rear"])], use_assumptions=not all_sb)))
@@ -336,7 +338,7 @@ _T = {
                need="Before I draw, I need a few details.", q_dims="What is the plot size (with feet or metres)?", q_road="Which side of the plot faces the road?",
                q_beds="How many bedrooms on the ground floor?", q_setbacks="What open space (setback) must be left on the front, rear, left and right? Please give values from your local rules.",
                why_setbacks="This decides the buildable footprint.", opt_assume="Proceed with concept assumptions", q_orient="Is the first number the length along the road (frontage) and the second the depth?",
-               gen="I am generating the dimensioned ground-floor plan now.", opts="Here are two layouts with exact dimensions; choose one to continue.", tr_front="Keeps the stair next to the entry; living room becomes narrower.",
+               nokey="Drawing design needs the Claude API key: the plan is designed by Claude, not by a template. Please add ANTHROPIC_API_KEY and ANTHROPIC_MODEL on the server and ask again.", gen="I am generating the dimensioned ground-floor plan now.", opts="Here are two layouts with exact dimensions; choose one to continue.", tr_front="Keeps the stair next to the entry; living room becomes narrower.",
                tr_rear="Frees a wider living room; the stair sits in the rear band.", exp="Starting the export; I will confirm once the file is checked.", views="Adding the requested drawings.",
                edit="I have worked out the change; please review it below before it is saved.", what="What would you like to change or add? For example: move the staircase, resize a room, change a door or window, or add an elevation or section.",
                next=" Next: ", done_gen="Revision {n} is created. Rooms (clear sizes): ", done_views="Revision {n} saved with the requested sheets:", assumed="Assumptions: ",
@@ -347,7 +349,7 @@ _T = {
                      need="Drawing banane se pehle kuch details chahiye.", q_dims="Plot ka size kitna hai (feet ya metre ke saath)?", q_road="Plot ka kaun sa side road par hai?",
                      q_beds="Ground floor par kitne bedrooms chahiye?", q_setbacks="Front, rear, left aur right mein kitni open space (setback) chhodni hai? Apne local rules ke hisaab se values dein.",
                      why_setbacks="Isse building ka footprint tay hota hai.", opt_assume="Concept assumptions ke saath aage badho", q_orient="Kya pehla number road ke saath wali length (frontage) hai aur doosra depth?",
-                     gen="Ab main dimensioned ground-floor plan bana raha hoon.", opts="Yeh do layouts exact dimensions ke saath hain; ek chuniye.", tr_front="Stair entry ke paas rehti hai; living room thoda narrow hota hai.",
+                     nokey="Plan Claude khud design karta hai, template se nahi — isliye ANTHROPIC_API_KEY chahiye. Server par ANTHROPIC_API_KEY aur ANTHROPIC_MODEL daal dijiye, phir dobara bolein.", gen="Ab main dimensioned ground-floor plan bana raha hoon.", opts="Yeh do layouts exact dimensions ke saath hain; ek chuniye.", tr_front="Stair entry ke paas rehti hai; living room thoda narrow hota hai.",
                      tr_rear="Living room chauda rehta hai; stair rear band mein jaati hai.", exp="Export shuru kar raha hoon; file check hone ke baad bataunga.", views="Maange gaye drawings add kar raha hoon.",
                      edit="Change tay ho gaya hai; save karne se pehle neeche review kar lein.", what="Kya badalna ya add karna hai? Jaise staircase shift karna, kisi room ka size, door/window ya elevation/section.",
                      next=" Aage: ", done_gen="Revision {n} ban gaya. Rooms (clear size): ", done_views="Revision {n} save hua, sheets:", assumed="Assumptions: ",
@@ -383,4 +385,4 @@ def provider_status() -> dict:
         return dict(provider="anthropic", live=True, configured=ok, model=settings.anthropic_model or None,
                     message="" if ok else "ANTHROPIC_MODEL is not set on the server")
     return dict(provider="mock", live=False, configured=True, model=None,
-                message="No ANTHROPIC_API_KEY configured: using the deterministic mock assistant (keyword understanding only). Drawings are real; the language understanding is not Claude.")
+                message=("No ANTHROPIC_API_KEY configured: plan design is switched off because plans are designed by Claude. Add ANTHROPIC_API_KEY and ANTHROPIC_MODEL on the server." if not settings.allow_template_demo else "No ANTHROPIC_API_KEY configured: using the deterministic mock assistant (keyword understanding only). Drawings are real; the language understanding is not Claude."))

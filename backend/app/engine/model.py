@@ -195,6 +195,7 @@ class ProjectModel(BaseModel):
     roof_approved: bool = False
     assumptions: list[Assumption] = Field(default_factory=list)
     review_status: str = "concept_unreviewed"
+    plan: Optional[dict] = None     # Claude-designed room plan (PlanSpec) this model was built from
 
     def level(self, lid="GF") -> Level:
         return next(l for l in self.levels if l.id == lid)

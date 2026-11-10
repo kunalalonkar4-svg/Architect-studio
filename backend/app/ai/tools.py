@@ -98,6 +98,32 @@ class ProposeEdit(Strict):
     preserve: Optional[list[str]] = None
 
 
+class PlanRoomT(Strict):
+    key: str
+    name: str
+    kind: Literal["living", "dining", "kitchen", "bedroom", "toilet", "store", "study", "entry", "stair", "parking", "sitout",
+                  "balcony", "passage", "pooja", "utility", "terrace"]
+    level: Literal["GF", "FF"]
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+class PlanConnT(Strict):
+    a: str
+    b: str
+    type: Literal["door", "open"]
+
+
+class DesignFloorPlan(Strict):
+    summary: str
+    rooms: list[PlanRoomT]
+    connections: list[PlanConnT]
+    entry_room: str
+    use_assumptions: Optional[bool] = None
+
+
 class ViewSpec(Strict):
     kind: Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
     paper: Optional[Literal["A4", "A3", "A2", "A1", "A0"]] = None
@@ -127,7 +153,9 @@ class GetQuantities(Strict):
 
 MODELS = {"update_brief": UpdateBrief, "ask_clarification": AskClarification, "generate_layout": GenerateLayout,
           "propose_options": ProposeOptions, "propose_edit": ProposeEdit, "generate_views": GenerateViews,
-          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities}
+          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities,
+          "design_floor_plan": DesignFloorPlan}
+TEMPLATE_ONLY = {"generate_layout", "propose_options"}   # fixed-template tools, kept for the offline demo provider only
 
 DESCRIPTIONS = {
     "update_brief": "Record or correct the project brief (plot, road side, open-space/setbacks, rooms, deliverables). Only fields the user actually stated; never invent values. Put each number with its unit.",
@@ -138,6 +166,12 @@ DESCRIPTIONS = {
     "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index, structure = preliminary column/footing/beam layout). Generate only what the user asked for.",
     "request_export": "Start an export (pdf = vector sheets at exact paper size, dxf = layered model-space CAD, png). Do not say a file is ready until the app confirms.",
     "explain_validation": "Read the current validation issues of the active revision so you can explain them to the user in simple language.",
+    "design_floor_plan": ("Design the house yourself, as an experienced architect: choose every room, its rectangle and how rooms connect, for ANY plot size, 1-5+ bedrooms, one or two floors. "
+                          "Use envelope_mm from the project context. Coordinates are mm, wall-centreline: x along the road frontage (left to right looking in from the road), y away from the road, origin at the front-left corner of the envelope; keep every value a multiple of 25. "
+                          "Rules the server enforces: rooms of one floor must tile ONE rectangle exactly (no gaps, no overlaps, inside the envelope); the first floor must have the same outer rectangle as the ground floor (use balcony/terrace rooms for unused area); "
+                          "every room must be reachable from entry_room via 'door' (needs >= 1100 mm shared wall) or 'open' (no wall, >= 600 mm) connections; bedrooms, living, kitchen and study need an outside wall for a window; "
+                          "two floors need a room of kind 'stair' with the identical rectangle on both floors (>= 2300 x 3000 mm for the dog-leg stair). Name first-floor keys with an f_ prefix. "
+                          "If a design already exists this creates a proposal the user confirms. If the server returns problems, fix them and call again."),
     "get_quantities": "Read the computed material quantities, placeholder-rate cost lines and PRELIMINARY structural sizes for the active revision. Use these numbers when the user asks about cost, BOQ, materials, beam/column/footing sizes; never invent quantities.",
 }
 
@@ -145,6 +179,8 @@ DESCRIPTIONS = {
 def anthropic_tools(strict: bool = True) -> list[dict]:
     out = []
     for name, m in MODELS.items():
+        if name in TEMPLATE_ONLY:
+            continue
         schema = m.model_json_schema()
         schema = _inline(schema)
         schema.pop("title", None)

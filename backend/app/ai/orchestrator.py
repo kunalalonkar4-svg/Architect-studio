@@ -37,8 +37,19 @@ def project_context(db: Session, project: Project) -> dict:
     rev = db.get(Revision, project.current_revision_id) if project.current_revision_id else None
     ctx = dict(project_name=project.name, status=project.status, brief=project.brief or {},
                missing_inputs=Brief.model_validate(project.brief or {}).missing(), capabilities=CAPABILITIES, current_revision=None)
+    try:
+        from ..engine.plan import envelope
+        b = Brief.model_validate(project.brief or {})
+        if b.plot_frontage_mm and b.plot_depth_mm and b.road_side:
+            bw, bd, sb, src, _ = envelope(b, True)
+            ctx["envelope_mm"] = dict(width_x=bw, depth_y=bd, setbacks_used=sb,
+                                      assumed_setbacks=[k for k, v in src.items() if v == "assumed"],
+                                      note="Room rectangles are wall centrelines inside x 0..width_x, y 0..depth_y (y=0 is the road side).")
+    except Exception:
+        pass
     if rev:
         m = ProjectModel.model_validate(rev.model)
+        ctx["current_plan"] = m.plan
         from .ops import _room_dims
         ctx["current_revision"] = dict(number=rev.number, render_status=rev.render_status, rooms=_room_dims(m),
                                        openings=[dict(mark=o.mark, type=o.type, w=o.width, h=o.height, sill=o.sill, between=[o.from_space, o.to_space]) for o in m.openings],
