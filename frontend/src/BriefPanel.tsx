@@ -6,7 +6,7 @@ type Unit = "mm" | "cm" | "m" | "ft" | "in";
 const F: Record<Unit, number> = { mm: 1, cm: 10, m: 1000, ft: 304.8, in: 25.4 };
 interface L { v: string; u: Unit }
 const fromMm = (mm: number | null | undefined, u: Unit): L => ({ v: mm == null ? "" : String(+(mm / F[u]).toFixed(3)), u });
-const VIEWS = ["site", "plan", "roof", "elevations", "section", "schedules", "index"];
+const VIEWS = ["site", "plan", "roof", "elevations", "section", "structure", "schedules", "index"];
 const SIDES: Record<string, string> = { n: "north", e: "east", s: "south", w: "west" };
 
 export default function BriefPanel({ full, reload, goTab }: { full: Full; reload: () => Promise<void>; goTab: (t: string) => void }) {

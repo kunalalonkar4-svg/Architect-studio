@@ -237,9 +237,10 @@ class MockProvider:
         if re.search(r"schedule|door.*window|opening", t) and not re.search(r"\b[dw]\d+\b", t): kinds.append("schedules")
         if re.search(r"site\s*plan|plot\s*plan", t): kinds.append("site")
         if re.search(r"roof|terrace|chhat", t): kinds.append("roof")
+        if re.search(r"structur|column|footing|foundation|beam", t): kinds.append("structure")
         if re.search(r"drawing index|cover sheet|\bindex\b|general notes", t): kinds.append("index")
         if re.search(r"full set|complete set|poora set|saare drawings|all drawings|coordinated", t):
-            kinds = ["site", "plan", "roof", "elevations", "section", "schedules", "index"]
+            kinds = ["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
         if kinds:
             return T["views"], [("generate_views", dict(views=[dict(kind=k) for k in dict.fromkeys(kinds)]))]
         if re.search(r"validat|check|issues?|problem|galat|errors?", t):

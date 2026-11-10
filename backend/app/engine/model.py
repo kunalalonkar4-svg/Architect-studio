@@ -145,7 +145,7 @@ class Stair(BaseModel):
 
 class ViewDef(BaseModel):
     id: str
-    type: Literal["site", "plan", "roof", "elevation", "section", "rooms", "openings", "index"]
+    type: Literal["site", "plan", "roof", "elevation", "section", "rooms", "openings", "index", "structure"]
     level: str = "GF"
     facing: Optional[Side] = None
     cut: Optional[dict] = None     # {"axis": "x"|"y", "at": mm, "look": side, "label": "A"}

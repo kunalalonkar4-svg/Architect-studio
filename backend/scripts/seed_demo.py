@@ -29,7 +29,7 @@ def main():
     ok = c.put(f"/api/projects/{pid}/brief", headers=h, json=dict(
         plot_frontage=L(30, "ft"), plot_depth=L(50, "ft"), road_side="east", bedrooms=2, kitchen_type="open", parking=True,
         setback_front=L(3, "m"), setback_rear=L(1.5, "m"), setback_left=L(0, "m"), setback_right=L(0, "m"),
-        requested_views=["site", "plan", "roof", "elevations", "section", "schedules", "index"]))
+        requested_views=["site", "plan", "roof", "elevations", "section", "structure", "schedules", "index"]))
     assert ok.status_code == 200, ok.text
     g = c.post(f"/api/projects/{pid}/generate", headers=h, json=dict(use_assumptions=False))
     assert g.status_code == 200, g.text

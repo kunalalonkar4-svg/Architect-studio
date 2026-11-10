@@ -164,3 +164,20 @@ def test_estimate_and_structure_endpoints_and_isolation(client, auth):
     empty = new_project(client, auth, "blank")
     r = client.get(f"/api/projects/{empty}/estimate", headers=auth)
     assert r.status_code == 404 and r.json()["error"]["next_actions"]
+
+
+def test_structural_layout_sheet_is_drawn_labelled_and_disclaimed(client, auth):
+    import pymupdf
+    from conftest import run_jobs
+    from test_acceptance_2_3 import make_project, cur
+    pid = make_project(client, auth, views=None)
+    r = client.post(f"/api/projects/{pid}/views", json=dict(views=[dict(kind="structure")]), headers=auth)
+    assert r.status_code == 200, r.text
+    run_jobs()
+    d = cur(client, auth, pid)
+    sh = next(s for s in d["current"]["sheets"] if s["kind"] == "structure")
+    assert sh["number"] == "S-101" and sh["ready"]
+    pdf = pymupdf.open(stream=client.get(f"/api/artifacts/{sh['artifacts']['pdf']}/file", headers=auth).content, filetype="pdf")
+    t = pdf[0].get_text()
+    assert "PRELIMINARY - NOT FOR CONSTRUCTION" in t and "licensed structural engineer" in t and "C1" in t and "FOOTINGS" in t
+    open("/tmp/structure-sheet.png", "wb").write(pdf[0].get_pixmap(dpi=110).tobytes("png"))

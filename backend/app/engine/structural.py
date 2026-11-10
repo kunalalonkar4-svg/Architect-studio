@@ -36,6 +36,7 @@ def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy:
     f_depth = max(300.0, _up((f_side - col_d) / 2 * 0.6 + 100, 50))
     # Steel indicators (rule-of-thumb kg per m3 of concrete)
     return dict(
+        sizes=dict(slab=slab_req, beam_d=beam_d, beam_b=230.0, col_b=col_b, col_d=col_d, footing=f_side, footing_depth=f_depth),
         assumptions=dict(sbc_kn_m2=sbc_kn_m2, concrete=f"M{fck:.0f}", steel=f"Fe{fy:.0f}", tributary_bay_m2=bay_m2, load_kn_m2=w_service, storeys="1 (ground floor + roof slab)"),
         items=[
             dict(id="slab", name="Roof slab thickness", value=f"{slab_req:.0f} mm", status="ok" if slab_ok else "check",

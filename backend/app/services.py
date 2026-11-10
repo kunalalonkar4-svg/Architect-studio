@@ -37,6 +37,7 @@ SHEET_KINDS = {
     "elevations": ("A-201", "Elevations", 100),
     "section": ("A-301", "Sections", 50),
     "schedules": ("A-401", "Schedules", 0),
+    "structure": ("S-101", "Structural Layout (Preliminary)", 100),
 }
 KIND_ORDER = list(SHEET_KINDS)
 
@@ -61,7 +62,7 @@ def ensure_sheet(model: ProjectModel, kind: str, paper: str | None = None, scale
     number, title, dscale = SHEET_KINDS[kind]
     sid = f"sheet-{kind}"
     vids: list[str] = []
-    if kind in ("plan", "site", "roof"):
+    if kind in ("plan", "site", "roof", "structure"):
         vid = f"v-{kind}"
         _put_view(model, ViewDef(id=vid, type=kind)); vids = [vid]
     elif kind == "elevations":

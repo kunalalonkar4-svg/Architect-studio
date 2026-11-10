@@ -30,6 +30,9 @@ LAYERS = {
     "A-SCALE": (2, (0.0, 0.0, 0.0), 0.25, "Graphic scale bar (6 m test segment)"),
     "A-SHEET": (7, (0.0, 0.0, 0.0), 0.35, "Sheet frame, title block"),
     "A-TABLE": (7, (0.0, 0.0, 0.0), 0.18, "Schedule tables"),
+    "S-COL": (1, (0.0, 0.0, 0.0), 0.35, "Columns (preliminary)"),
+    "S-FOOT": (5, (0.0, 0.0, 0.0), 0.18, "Footings (preliminary)"),
+    "S-BEAM": (4, (0.2, 0.2, 0.2), 0.18, "Plinth / roof beams (preliminary)"),
 }
 
 EM = 1.3     # font size (em) = text height h * EM

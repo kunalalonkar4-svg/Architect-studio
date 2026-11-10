@@ -902,8 +902,56 @@ def index_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewR
     return ViewResult(vd.id, "COVER, INDEX AND GENERAL NOTES", b.prims, bbox_of(b.prims, 1), 0, dict(sheets=sheets))
 
 
+def structure_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewResult:
+    """PRELIMINARY column / footing / beam layout. Concept sizes from engine.structural; never a structural design."""
+    from .structural import prelim
+    b = B(S)
+    ob = model.outer_bounds()
+    sz = prelim(model)["sizes"]
+    for w in model.walls:                                         # architectural walls in light grey for reference
+        t = w.thickness / 2
+        if w.horizontal:
+            b.rect(min(w.x1, w.x2) - t, w.y1 - t, max(w.x1, w.x2) + t, w.y1 + t, "A-SECT-BEYOND")
+        else:
+            b.rect(w.x1 - t, min(w.y1, w.y2) - t, w.x1 + t, max(w.y1, w.y2) + t, "A-SECT-BEYOND")
+    for w in model.walls:                                         # plinth / roof beams run on every wall line
+        b.line(w.x1, w.y1, w.x2, w.y2, "S-BEAM", "center")
+    cnt: dict[tuple[int, int], int] = {}
+    for w in model.walls:
+        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
+            k = (round(x / 10) * 10, round(y / 10) * 10)
+            cnt[k] = cnt.get(k, 0) + 1
+    cols = sorted([k for k, n in cnt.items() if n >= 2], key=lambda k: (-k[1], k[0]))
+    for i, (x, y) in enumerate(cols, 1):
+        fs = sz["footing"] / 2
+        b.rect(x - fs, y - fs, x + fs, y + fs, "S-FOOT", None, "dash")
+        b.rect(x - sz["col_b"] / 2, y - sz["col_d"] / 2, x + sz["col_b"] / 2, y + sz["col_d"] / 2, "S-COL", "mid")
+        b.text(x + sz["col_b"] / 2 + b.p(1), y + sz["col_d"] / 2 + b.p(1), f"C{i}", 1.8, "A-ANNO-TEXT", "l", "b", bold=True)
+    b.dim_h(ob[0], ob[2], ob[3], ob[3] + b.p(10), f"{ob[2]-ob[0]:.0f}")
+    b.dim_v(ob[1], ob[3], ob[0], ob[0] - b.p(10), f"{ob[3]-ob[1]:.0f}")
+    b.north_arrow(ob[2] + b.p(24), ob[3] + b.p(4))
+    b.scale_bar(ob[0], ob[1] - b.p(20), S)
+    x0 = ob[2] + b.p(34)
+    y = ob[3]
+    lines = [("PRELIMINARY - NOT FOR CONSTRUCTION", 3.0, True),
+             ("Rule-of-thumb sizes for early planning. Not a structural design.", 2.0, False),
+             ("A licensed structural engineer must design and check all members", 2.0, False),
+             ("against current IS codes using a soil investigation report.", 2.0, False), ("", 2.0, False),
+             (f"COLUMNS C1-C{len(cols)}: {sz['col_b']:.0f} x {sz['col_d']:.0f} mm RCC (M20 / Fe500), at wall corners and junctions", 2.0, False),
+             (f"FOOTINGS: {sz['footing']:.0f} x {sz['footing']:.0f} x {sz['footing_depth']:.0f} mm under each column (assumed SBC 150 kN/m2)", 2.0, False),
+             (f"ROOF BEAMS: {sz['beam_b']:.0f} x {sz['beam_d']:.0f} mm on wall lines;  PLINTH BEAM 230 x 300 mm", 2.0, False),
+             (f"ROOF SLAB: {sz['slab']:.0f} mm thick (model {model.levels[0].slab:.0f} mm)", 2.0, False), ("", 2.0, False),
+             ("Beam and column positions follow the architectural walls (dash-dot lines);", 1.8, False),
+             ("column grid is indicative and not optimised. Footings may overlap and need design.", 1.8, False)]
+    for txt, h, bold in lines:
+        if txt:
+            b.text(x0, y, txt, h, "A-ANNO-TEXT", "l", "t", bold=bold)
+        y -= b.p(h + 2.4)
+    return ViewResult(vd.id, "STRUCTURAL LAYOUT (PRELIMINARY)", b.prims, bbox_of(b.prims, S), S, dict(columns=len(cols), sizes=sz))
+
+
 BUILDERS = dict(plan=plan_view, site=site_view, roof=roof_view, elevation=elevation_view, section=section_view,
-                rooms=rooms_schedule, openings=openings_schedule, index=index_view)
+                rooms=rooms_schedule, openings=openings_schedule, index=index_view, structure=structure_view)
 
 
 def build_view(model: ProjectModel, vd: ViewDef, S: int, project: dict | None = None) -> ViewResult:
