@@ -196,7 +196,9 @@ def test_claude_designs_a_20x40_plan_and_fixes_server_reported_problems(client, 
     live_fake.rounds[:] = [
         [tu("t1", "update_brief", brief)],
         [tu("t2", "design_floor_plan", _plan_20x40(drop_store=True))],       # leaves a hole
-        [tu("t3", "design_floor_plan", _plan_20x40())],
+        [tu("t2b", "design_floor_plan", dict(_plan_20x40(), final=True))],   # refused: not previewed yet
+        [tu("t3", "design_floor_plan", _plan_20x40())],                      # preview: Claude is shown its drawing
+        [tu("t4", "design_floor_plan", dict(_plan_20x40(), final=True))],    # reviewed -> saved
         [dict(type="text", text="Plan bana diya.")],
     ]
     chat(client, auth, pid, "20 by 40 feet ka plot, 2 bedroom")
@@ -204,7 +206,10 @@ def test_claude_designs_a_20x40_plan_and_fixes_server_reported_problems(client, 
     sink = live_fake.sink
     assert any("envelope_mm" in json.dumps(c["messages"]) for c in sink)            # Claude is told the buildable envelope
     third = json.dumps(sink[2]["messages"])
-    assert "Gap on the ground floor" in json.dumps(sink[3]["messages"]) and "width_x" in third                                      # the server's exact problem was returned to Claude
+    assert "Gap on the ground floor" in json.dumps(sink[3]["messages"]) and "width_x" in third
+    assert "review_first" in json.dumps(sink[4]["messages"])                       # cannot finalise without looking at the drawing
+    assert '"type": "image"' in json.dumps(sink[5]["messages"])                    # Claude is shown a picture of its own plan
+    assert "review_checklist" in json.dumps(sink[5]["messages"])                                      # the server's exact problem was returned to Claude
     d = cur(client, auth, pid)
     assert d["current"] and d["current"]["number"] == 1
     plan = next(s for s in d["current"]["sheets"] if s["kind"] == "plan")
@@ -218,13 +223,13 @@ def test_claude_revises_a_designed_plan_through_a_confirmed_proposal(client, aut
     pid = new_project(client, auth, "Revise")
     brief = dict(plot_frontage=dict(value=20, unit="ft"), plot_depth=dict(value=40, unit="ft"), road_side="south", bedrooms=2,
                  setback_front=dict(value=1.5, unit="m"), setback_rear=dict(value=1.0, unit="m"), setback_left=dict(value=0, unit="m"), setback_right=dict(value=0, unit="m"))
-    live_fake.rounds[:] = [[tu("a", "update_brief", brief)], [tu("b", "design_floor_plan", _plan_20x40())], [dict(type="text", text="Done.")]]
+    live_fake.rounds[:] = [[tu("a", "update_brief", brief)], [tu("b0", "design_floor_plan", _plan_20x40())], [tu("b", "design_floor_plan", dict(_plan_20x40(), final=True))], [dict(type="text", text="Done.")]]
     chat(client, auth, pid, "20x40 ft, 2 bedroom"); run_jobs()
     revised = _plan_20x40()
     t = next(r for r in revised["rooms"] if r["key"] == "toilet"); st = next(r for r in revised["rooms"] if r["key"] == "store")
     t["w"], st["x"], st["w"] = 1500, 4425, 1425                                    # bigger toilet, smaller store
     prov._provider_cache.clear()
-    live_fake.rounds[:] = [[tu("c", "design_floor_plan", revised)], [dict(type="text", text="Proposal ready.")]]
+    live_fake.rounds[:] = [[tu("c0", "design_floor_plan", revised)], [tu("c", "design_floor_plan", dict(revised, final=True))], [dict(type="text", text="Proposal ready.")]]
     chat(client, auth, pid, "toilet thoda bada karo"); run_jobs()
     d = cur(client, auth, pid)
     assert d["proposals"] and d["current"]["number"] == 1                         # nothing changes until the user confirms

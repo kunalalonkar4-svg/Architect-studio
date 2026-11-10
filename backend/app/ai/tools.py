@@ -122,6 +122,7 @@ class DesignFloorPlan(Strict):
     connections: list[PlanConnT]
     entry_room: str
     use_assumptions: Optional[bool] = None
+    final: Optional[bool] = None
 
 
 class ViewSpec(Strict):
@@ -171,7 +172,7 @@ DESCRIPTIONS = {
                           "Rules the server enforces: rooms of one floor must tile ONE rectangle exactly (no gaps, no overlaps, inside the envelope); the first floor must have the same outer rectangle as the ground floor (use balcony/terrace rooms for unused area); "
                           "every room must be reachable from entry_room via 'door' (needs >= 1100 mm shared wall) or 'open' (no wall, >= 600 mm) connections; bedrooms, living, kitchen and study need an outside wall for a window; "
                           "two floors need a room of kind 'stair' with the identical rectangle on both floors (>= 2300 x 3000 mm for the dog-leg stair). Name first-floor keys with an f_ prefix. "
-                          "If a design already exists this creates a proposal the user confirms. If the server returns problems, fix them and call again."),
+                          "WORKFLOW: call with final=false first; the server returns a drawing image of your plan with room sizes and a review checklist, but saves nothing. Review it critically, fix and re-preview as needed, then call with final=true and the identical plan to save it (server refuses final=true for a plan you have not previewed). If a design already exists, final=true creates a proposal the user confirms. If the server returns problems, fix them and call again."),
     "get_quantities": "Read the computed material quantities, placeholder-rate cost lines and PRELIMINARY structural sizes for the active revision. Use these numbers when the user asks about cost, BOQ, materials, beam/column/footing sizes; never invent quantities.",
 }
 

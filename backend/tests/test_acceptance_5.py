@@ -236,3 +236,16 @@ def test_boq_excel_is_a_real_workbook_with_formulas_and_user_rates(client, auth)
     assert mas[4] == 9000 and str(mas[5]).startswith("=D")                    # user rate used; amount is a live formula
     assert "Contingency @ 7%" in [c.value for c in wb["Abstract of Cost"]["B"]]
     assert client.get(f"/api/projects/{pid}/estimate.xlsx", params=dict(rates="[1]"), headers=auth).status_code == 422
+
+
+def test_prompt_example_plans_are_valid_for_the_real_engine():
+    """The plans shown to Claude in the system prompt must always build cleanly (no errors or warnings)."""
+    from app.ai.examples import PLAN_20X50, PLAN_40X50_DUPLEX
+    from app.engine.model import Brief, Setbacks
+    from app.engine.plan import PlanSpec, build_model_from_plan
+    from app.engine.validate import validate_model
+    for plan, (w, d, sb) in ((PLAN_20X50, (20, 50, (1500, 1000, 0, 0))), (PLAN_40X50_DUPLEX, (40, 50, (3000, 1500, 900, 900)))):
+        p = dict(plan); p["rationale"] = p.pop("summary")
+        br = Brief(plot_frontage_mm=w * 304.8, plot_depth_mm=d * 304.8, road_side="s", setbacks=Setbacks(front=sb[0], rear=sb[1], left=sb[2], right=sb[3]), bedrooms=2)
+        m = build_model_from_plan(br, PlanSpec.model_validate(p))
+        assert [i for i in validate_model(m) if i["severity"] != "info"] == []

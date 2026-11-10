@@ -1,6 +1,8 @@
 """Execution of allow-listed operations: validate -> authorise -> run. The AI proposes; the engine computes."""
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 
 from pydantic import ValidationError
@@ -34,6 +36,7 @@ class Outcome:
     result: dict
     events: list = field(default_factory=list)
     is_error: bool = False
+    images: list = field(default_factory=list)      # PNG bytes shown to the model (e.g. a preview of its own drawing)
 
 
 def err(code, message, next_actions=None, detail=None) -> Outcome:
@@ -199,8 +202,35 @@ def op_generate_layout(ctx: Ctx, a) -> Outcome:
                    [_rev_event(rev)])
 
 
+def _plan_hash(a) -> str:
+    import hashlib
+    d = dict(rooms=sorted([r.model_dump() for r in a.rooms], key=lambda r: r["key"]),
+             conns=sorted([c.model_dump() for c in a.connections], key=lambda c: (c["a"], c["b"], c["type"])), entry=a.entry_room)
+    return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _preview_png(ctx: Ctx, model: ProjectModel, brief: Brief) -> bytes:
+    from ..engine.render import render_pdf, render_png
+    from ..engine.sheets import compose_sheet
+    sd = ensure_sheet(model, "plan")
+    meta = sheet_meta(ctx.db, ctx.project, ctx.user, model, brief, {}, 0, ctx.project.created_at)
+    meta["sheet_index"] = [dict(number=s.number, title=s.title, scale="", paper=s.paper, rev="0") for s in model.sheets]
+    autofit(model, sd, meta)
+    return render_png(render_pdf([compose_sheet(model, sd, meta)]), 0, dpi=80)
+
+
+REVIEW_CHECKLIST = [
+    "Walk in from the road: does the approach, entry and public-to-private sequence feel right?",
+    "Is every bedroom comfortably usable (about 9 m2 or more, not a long thin strip) with a window and a door that does not clash with furniture?",
+    "Is circulation efficient (little wasted passage) and is the kitchen next to dining with an outside wall?",
+    "Are toilets reachable without crossing living or bedrooms, with a vent, and stacked above each other on a duplex?",
+    "Is the stair well placed, and do doors, walls and labels read clearly in the drawing?",
+    "Does the plan respect the user's stated preferences (Vastu, parking, bedroom count)?",
+]
+
+
 def op_design_floor_plan(ctx: Ctx, a) -> Outcome:
-    from ..engine.plan import PlanConn, PlanRoom, PlanSpec, build_model_from_plan, envelope
+    from ..engine.plan import PlanConn, PlanRoom, PlanSpec, build_model_from_plan
     rev = current_revision(ctx)
     brief = Brief.model_validate((rev.brief if rev else ctx.project.brief) or {})
     missing = [m for m in brief.missing() if m["id"] not in ("setbacks",)]
@@ -213,13 +243,40 @@ def op_design_floor_plan(ctx: Ctx, a) -> Outcome:
                    ["Provide front / rear / left / right open space", "Proceed with concept assumptions"], dict(assumption_defaults=dict(front=3000, rear=1500, left=0, right=0)))
     plan = PlanSpec(rooms=[PlanRoom(**r.model_dump()) for r in a.rooms], connections=[PlanConn(**c.model_dump()) for c in a.connections],
                     entry_room=a.entry_room, rationale=a.summary)
-    if rev:
-        return _make_edit_proposal(ctx, rev, [dict(op="replace_plan", plan=plan.model_dump())], [], a.summary)
+    h = _plan_hash(a)
+    seen = ctx.__dict__.setdefault("previewed", set())
+    if a.final and h not in seen:
+        return err("review_first", "Look at this exact plan before finalising: call design_floor_plan with final=false, review the returned drawing against the checklist, fix anything wrong, then call with final=true.",
+                   ["Preview the plan first (final=false)"])
     model = build_model_from_plan(brief, plan, use_assumptions=use_asm)
     errors = [i for i in validate_model(model) if i["severity"] == "error"]
     if errors:
         return err("plan_has_errors", "The plan was built but has errors: " + "; ".join(e["message"] for e in errors[:6]),
                    [e["fix"] or e["message"] for e in errors[:6]], dict(issues=errors))
+    if not a.final:
+        from ..engine.layout import room_metrics
+        rooms, flagged = [], []
+        for s in model.spaces:
+            m = room_metrics(model, s)
+            rooms.append(dict(floor=s.level, key=s.key, name=s.name, clear_mm=f"{m['clear_w']:.0f} x {m['clear_d']:.0f}", area_m2=round(m["area_m2"], 2)))
+            if min(m["clear_w"], m["clear_d"]) > 0 and max(m["clear_w"], m["clear_d"]) / min(m["clear_w"], m["clear_d"]) > 2.0 and s.kind in ("bedroom", "living", "kitchen", "study"):
+                flagged.append(f"{s.name} is long and thin ({m['clear_w']:.0f} x {m['clear_d']:.0f} mm)")
+        total = sum(r["area_m2"] for r in rooms) or 1
+        circ = sum(r["area_m2"] for r, s in zip(rooms, model.spaces) if s.kind in ("passage", "entry", "stair")) / total
+        seen.add(h)
+        try:
+            png = _preview_png(ctx, model, brief)
+        except Exception as e:      # the preview must never block the design
+            png = b""
+            flagged.append(f"(drawing preview unavailable: {type(e).__name__})")
+        warnings = [i["message"] for i in validate_model(model) if i["severity"] == "warning"]
+        return Outcome(dict(ok=True, preview=True, rooms=rooms, circulation_share=f"{circ * 100:.0f}% of floor area (passage + entry + stair)", warnings=warnings, shape_flags=flagged,
+                            review_checklist=REVIEW_CHECKLIST,
+                            note="NOT saved yet. Study the attached drawing like a senior architect. If anything is wrong, fix the plan and call design_floor_plan again with final=false. "
+                                 "When you are satisfied, call it once more with the identical plan and final=true to save it."),
+                       images=[png] if png else [])
+    if rev:
+        return _make_edit_proposal(ctx, rev, [dict(op="replace_plan", plan=plan.model_dump())], [], a.summary)
     if sb_missing and a.use_assumptions:
         ctx.project.use_assumptions = True
     prepare_sheets(ctx, model, brief, [dict(kind=k) for k in (brief.requested_views or ["plan"])])

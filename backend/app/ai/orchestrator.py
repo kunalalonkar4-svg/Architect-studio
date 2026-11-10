@@ -159,7 +159,11 @@ def run_turn(db: Session, project: Project, user: User, text: str, attachment_id
                 for ev in out.events:
                     events.append(ev)
                     yield dict(type="event", event=ev)
-                results.append(dict(type="tool_result", tool_use_id=tc["id"], is_error=out.is_error, content=json.dumps(out.result, default=str)))
+                body = json.dumps(out.result, default=str)
+                if out.images:
+                    import base64
+                    body = [dict(type="text", text=body)] + [dict(type="image", source=dict(type="base64", media_type="image/png", data=base64.b64encode(im).decode())) for im in out.images]
+                results.append(dict(type="tool_result", tool_use_id=tc["id"], is_error=out.is_error, content=body))
             messages.append(dict(role="user", content=results))
             if assistant_text and not assistant_text.endswith("\n"):
                 assistant_text += "\n"; yield dict(type="text", delta="\n")
