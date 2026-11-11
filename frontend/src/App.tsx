@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, AiStatus, getToken, User } from "./api";
-import Auth from "./Auth";
+import Landing from "./Landing";
 import Settings from "./Settings";
 import Sidebar from "./Sidebar";
 import Workspace, { useWide } from "./Workspace";
@@ -15,7 +15,7 @@ export default function App() {
   useEffect(() => { if (!getToken()) return; api("/auth/me").then(r => { setUser(r.user); setAi(r.ai); }).catch(() => undefined).finally(() => setBooting(false)); }, []);
   useEffect(() => { try { pid ? localStorage.setItem("drafta.pid", pid) : localStorage.removeItem("drafta.pid"); } catch { /* ignore */ } }, [pid]);
   if (booting) return <div className="pane-center"><Spinner label="Starting…" /></div>;
-  if (!user || !ai) return <Auth onAuthed={(u, a) => { setUser(u); setAi(a); }} />;
+  if (!user || !ai) return <Landing onAuthed={(u, a) => { setUser(u); setAi(a); }} />;
   const bump = () => setKey(k => k + 1);
   const side = <Sidebar activeId={pid} onSelect={id => { setPid(id); setDrawer(false); }} refreshKey={key} onChanged={bump} onSettings={() => setSettings(true)} user={user.firm_name || user.display_name} onClose={wide ? undefined : () => setDrawer(false)} />;
   return (
