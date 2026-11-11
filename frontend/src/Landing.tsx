@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Auth from "./Auth";
 import { AiStatus, User } from "./api";
 import "./landing.css";
@@ -25,8 +25,20 @@ const STEPS = [
   ["Export the set", "PDF, DXF, PNG and an Excel estimate, ready to share with your engineer."],
 ];
 
+const PROMPTS = ["20×40 plot, 2 BHK, road on the east", "40×50 duplex, 4 BHK with parking", "30×50, 3 BHK, Vastu friendly", "Plot 20×50, shop below and flat above"];
+function useTyping() {
+  const [i, setI] = useState(0); const [n, setN] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(PROMPTS[0].length); return; }
+    const full = n >= PROMPTS[i].length;
+    const t = setTimeout(() => { if (full) { setI((i + 1) % PROMPTS.length); setN(0); } else setN(n + 1); }, full ? 1800 : 55);
+    return () => clearTimeout(t);
+  }, [i, n]);
+  return PROMPTS[i].slice(0, n);
+}
+
 export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus) => void }) {
-  const [auth, setAuth] = useState(false); const [menu, setMenu] = useState(false);
+  const [auth, setAuth] = useState(false); const [menu, setMenu] = useState(false); const typed = useTyping();
   if (auth) return (
     <div className="lp-authwrap">
       <button className="lp-back" onClick={() => setAuth(false)}>Back to home</button>
@@ -54,14 +66,12 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
         <Cta />
         <div className="lp-frame">
           <div className="lp-win">
-            <div className="lp-win-bar"><span>Projects <i>/</i> <b>40 × 50 duplex</b></span><span className="lp-pill">Export</span></div>
+            <div className="lp-win-bar"><span>Projects <i>/</i> <b>My new house</b></span><span className="lp-pill">Export</span></div>
             <div className="lp-win-body">
               <div className="lp-chat">
-                <div className="u">40×50 plot, road on south. Duplex, 4 BHK, parking.</div>
-                <div className="a">Done. Ground floor has parking, living, kitchen and 1 bedroom. First floor has 3 bedrooms. Stair is checked for headroom.</div>
-                <div className="in">Make the kitchen bigger</div>
+                <div className="a">Let’s draft your dream build. What is your plot size and how many bedrooms?</div>
+                <div className="in"><span>{typed}<i className="caret" aria-hidden /></span><b aria-hidden><svg viewBox="0 0 20 20" width="12" height="12"><path d="M10 16V4M5 9l5-5 5 5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></b></div>
               </div>
-              <img src="/samples/d40x50-plan.jpg" alt="Floor plan sheet of a 40 by 50 foot duplex" width="1800" height="1009" fetchPriority="high" />
             </div>
           </div>
         </div>
@@ -72,11 +82,17 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
         <p className="lead">Generate new layouts, refine them in plain words, and take the drawings straight to your engineer.</p>
         <div className="lp-cards">
           {FEATURES.map(f => (
-            <article key={f[1]} className="lp-card">
+            <article key={f[1]} className="lp-card"><div className="in">
               <span className="ic" style={{ background: f[0] }}><svg viewBox="0 0 24 24" width="18" height="18"><path d={f[3]} fill="none" stroke="#222" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-              <h3>{f[1]}</h3><p>{f[2]}</p>
+              <h3>{f[1]}</h3><p>{f[2]}</p></div>
             </article>))}
         </div>
+      </section>
+
+      <section className="lp-sec" id="canvas">
+        <h2>Your plan, drawn to scale</h2>
+        <p className="lead">Plans, elevations and sections appear on the canvas as you chat. Every line is dimensioned.</p>
+        <div className="lp-frame"><div className="lp-win"><img className="lp-shot" loading="lazy" src="/samples/d40x50-plan.jpg" alt="Floor plan sheet of a 40 by 50 foot duplex" width="1800" height="1009" /></div></div>
       </section>
 
       <section className="lp-sec" id="set">
