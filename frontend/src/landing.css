@@ -55,3 +55,5 @@
  .lp-cards,.lp-cards.four{grid-template-columns:1fr}.lp-card .ic,.lp-card .num{margin-bottom:1rem}
  .lp-gal{grid-template-columns:1fr}
 }
+.lp-gal{align-items:start}.lp-gal figure:first-child{grid-row:span 3}
+@media (max-width:860px){.lp-gal figure:first-child{grid-row:auto}}

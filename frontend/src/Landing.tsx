@@ -61,7 +61,7 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
                 <div className="a">Done. Ground floor has parking, living, kitchen and 1 bedroom. First floor has 3 bedrooms. Stair is checked for headroom.</div>
                 <div className="in">Make the kitchen bigger</div>
               </div>
-              <img src="/samples/d40x50-plan.jpg" alt="Floor plan sheet of a 40 by 50 foot duplex" width="2000" height="1413" fetchPriority="high" />
+              <img src="/samples/d40x50-plan.jpg" alt="Floor plan sheet of a 40 by 50 foot duplex" width="1800" height="1009" fetchPriority="high" />
             </div>
           </div>
         </div>
