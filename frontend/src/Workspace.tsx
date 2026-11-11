@@ -10,8 +10,8 @@ import { ErrorBox, Notice, Spinner, toNotice, useInterval } from "./ui";
 
 export type Tab = "chat" | "drawing" | "brief" | "estimate" | "revisions" | "export";
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "chat", label: "Chat", icon: "💬" }, { id: "drawing", label: "Drawing", icon: "📐" }, { id: "brief", label: "Brief", icon: "📝" },
-  { id: "estimate", label: "Estimate", icon: "₹" }, { id: "revisions", label: "Revisions", icon: "🕘" }, { id: "export", label: "Export", icon: "⬇" },
+  { id: "chat", label: "Chat", icon: "" }, { id: "drawing", label: "Drawing", icon: "" }, { id: "brief", label: "Brief", icon: "" },
+  { id: "estimate", label: "Estimate", icon: "" }, { id: "revisions", label: "History", icon: "" }, { id: "export", label: "Export", icon: "" },
 ];
 
 export function useWide() {
@@ -63,7 +63,7 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
     <div className="tabbar" role="tablist" aria-label="Workspace sections">
       {list.map(t => (
         <button key={t.id} role="tab" aria-selected={rt === t.id || (!wide && tab === t.id)} aria-controls="pane" className={(wide ? rt : tab) === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
-          <span aria-hidden>{t.icon}</span><span>{t.label}</span>
+          <span>{t.label}</span>
           {t.id === "drawing" && rendering && <i className="dot" title="Rendering" />}
           {t.id === "chat" && full.proposals.length > 0 && <i className="dot warn" title="Awaiting your confirmation" />}
         </button>))}
@@ -74,9 +74,9 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
       <header className="wshead">
         <div className="ptitle"><strong>{full.project.name}</strong>
           <small>{full.current ? `Revision ${full.current.number}` : "No drawing yet"} · {full.project.review_status === "concept_unreviewed" ? "Concept — not reviewed" : "Issued for owner’s review"}</small></div>
-        <div className={"aibadge " + (full.ai.live ? "live" : "mock")} title={full.ai.message || `Model ${full.ai.model}`}>{full.ai.live ? "Claude" : "Mock AI"}</div>
+        <div className={"aibadge " + (full.ai.live ? "live" : "mock")} title={full.ai.message || `Model ${full.ai.model}`}>{full.ai.live ? "Claude" : "Demo mode"}</div>
       </header>
-      {!full.ai.live && <div className="banner warn slim">Mock assistant active — no Anthropic key on the server. It understands simple English/Hinglish/Hindi keywords; drawings are real.</div>}
+      {!full.ai.live && <div className="banner warn slim">Demo mode: add an Anthropic API key on the server for full AI design. Drawings are real.</div>}
       {full.last_good && full.current?.render_status === "failed" && <div className="banner warn slim">Latest revision failed to render. Your earlier good drawing (revision {full.last_good.number}) is untouched — see Revisions.</div>}
       {wide ? (
         <div className="cols">

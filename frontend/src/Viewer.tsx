@@ -56,7 +56,7 @@ function SheetView({ sheet, rev, readOnly, reload, setErr, pid }: { sheet: Sheet
   const fit = useCallback(() => {
     const b = box.current; if (!b || !nat) return;
     const k = Math.min(b.clientWidth / nat.w, b.clientHeight / nat.h) * 0.96;
-    setView({ k, x: (b.clientWidth - nat.w * k) / 2, y: (b.clientHeight - nat.h * k) / 2 });
+    setView({ k, x: (b.clientWidth - nat.w * k) / 2, y: Math.max(8, (b.clientHeight - nat.h * k) / 2) });
   }, [nat]);
   useEffect(fit, [fit]);
   useEffect(() => { const b = box.current; if (!b) return; const ro = new ResizeObserver(fit); ro.observe(b); return () => ro.disconnect(); }, [fit]);

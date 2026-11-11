@@ -26,8 +26,8 @@ export default function App() {
         {pid ? <Workspace key={pid} pid={pid} onListChanged={bump} /> : (
           <div className="pane-center welcome">
             <h2>Welcome{user.display_name ? `, ${user.display_name}` : ""}</h2>
-            <p className="muted">Create a project, then describe the plot and rooms in your own words. You’ll get a dimensioned plan, elevations, section and schedules — exportable as vector PDF, DXF and PNG.</p>
-            {!wide && <button className="btn primary" onClick={() => setDrawer(true)}>Open projects</button>}
+            <p className="muted">Create a project, then tell us the plot size and BHK. You get the plan, elevations, section and an estimate.</p>
+            {wide ? <p className="muted">Use “New project” on the left.</p> : <button className="btn primary" onClick={() => setDrawer(true)}>Open projects</button>}
             <p className="fine">Concept drawings only — not reviewed, signed or approved. Check local rules with a licensed professional.</p>
           </div>)}
       </main>
