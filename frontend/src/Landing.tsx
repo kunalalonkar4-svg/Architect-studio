@@ -110,16 +110,16 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
           <a href="#features">Features</a><a href="#set">Drawing set</a><a href="#more">More</a><a href="#/sample">Try a sample</a><a href="#limits">Limits</a>
           <button className="lp-signin" onClick={go}>Sign in</button>
         </nav>
-        <button className="lp-pillbtn dark lp-navcta" onClick={go}>Try for free</button>
+        <button className="lp-pillbtn dark lp-navcta" onClick={go}>Get started</button>
         <button className="lp-menu" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}><span /><span /></button>
       </header>
 
       <section className="lp-hero" id="top">
         <div className="lp-eyebrow"><span className="logo-mark" aria-hidden /> Drafta <i /> <span>AI house plan studio for the web</span></div>
-        <h1>House plans that are<br />useful for everyone.</h1>
-        <p>Chat, draw and check — all in one place. Tell Drafta your plot, and get plans, elevations, columns and an estimate.<br />Speaks English, Hindi and Hinglish.</p>
+        <h1>House plans, drawn<br />from a conversation.</h1>
+        <p>Describe your plot in plain words. Drafta returns dimensioned plans, elevations, column grids and an estimate.<br />Works in English, Hindi and Hinglish.</p>
         <div className="lp-ctas">
-          <button className="lp-pillbtn dark" onClick={go}>Try Drafta <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+          <button className="lp-pillbtn dark" onClick={go}>Start a project <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
           <a className="lp-pillbtn light" href="#/sample">See a sample</a>
         </div>
       </section>
@@ -151,23 +151,23 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
       </section>
 
       <section className="lp-sec" id="more">
-        <h2>And much more</h2>
-        <p className="lead">Everything you need from first idea to a set you can hand to your engineer.</p>
+        <h2>Also included</h2>
+        <p className="lead">From a first idea to a drawing set you can hand to your engineer.</p>
         <div className="lp-more">
           {MORE.map(m => <div key={m[1]}><Icon d={m[0]} /><h3>{m[1]}</h3><p>{m[2]}</p></div>)}
         </div>
       </section>
 
       <section className="lp-sec" id="start">
-        <h2>Get started</h2>
-        <p className="lead">Free to try on the web. Sign up with your email.</p>
+        <h2>Begin in three steps</h2>
+        <p className="lead">Create an account with your email and try your first plot.</p>
         <div className="lp-steps">
-          <div><small>01</small><h3>Open Drafta</h3><p>Go to the web app. Nothing to install.</p></div>
-          <div><small>02</small><h3>Sign in</h3><p>Use your email to keep every project in one place.</p></div>
-          <div><small>03</small><h3>Start chatting</h3><p>Describe your plot. Ask for plans, elevations, columns or a Vastu check.</p></div>
+          <div><small>01</small><h3>Create an account</h3><p>Runs in your browser. Nothing to install.</p></div>
+          <div><small>02</small><h3>Describe your plot</h3><p>Plot size, road side, rooms. Plain words are fine.</p></div>
+          <div><small>03</small><h3>Review the drawings</h3><p>Ask for changes, a Vastu check or columns, then export.</p></div>
         </div>
         <div className="lp-ctas">
-          <button className="lp-pillbtn dark" onClick={go}>Open Drafta <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+          <button className="lp-pillbtn dark" onClick={go}>Start a project <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
           <a className="lp-pillbtn light" href="#/sample">Try a sample</a>
         </div>
       </section>
