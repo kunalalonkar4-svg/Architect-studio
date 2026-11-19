@@ -192,6 +192,7 @@ export function ProposalCard({ p, full, reload, goTab }: { p: Proposal; full: Fu
               <div><strong>{o.label}</strong>{o.tradeoff && <div className="muted">{o.tradeoff}</div>}
                 <ul className="mini">{(o.rooms || []).slice(0, 8).map((r: any, k: number) => <li key={k}>{r.name}: {r.clear_w}×{r.clear_d} mm, {r.area_m2} m²</li>)}</ul>
                 {o.issues?.length > 0 && <div className="note err">{o.issues.map((x: any) => x.message).join(" · ")}</div>}
+                {o.metrics && <div className="metrics" aria-label="Measures"><span>Vastu {o.metrics.vastu ?? "–"}/100</span><span>{o.metrics.built_up_m2} m² built-up</span><span>₹ {Math.round(o.metrics.cost_per_sqft_inr).toLocaleString("en-IN")}/sq ft</span><span>{o.metrics.to_check} to check</span></div>}
                 {o.stair && <small>Stair: {o.stair.risers} risers × {Math.round(o.stair.riser_mm)} mm, tread {Math.round(o.stair.tread_mm)} mm</small>}
               </div>
             </label>

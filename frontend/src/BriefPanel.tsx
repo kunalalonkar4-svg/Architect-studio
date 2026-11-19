@@ -119,7 +119,14 @@ function QuickEdits({ full, reload, goTab }: { full: Full; reload: () => Promise
     setBusy(true); setErr(null);
     try { await api(`/projects/${full.project.id}/edits`, { json: { summary, edits } }); await reload(); goTab("chat"); } catch (e) { setErr(toNotice(e)); } finally { setBusy(false); }
   }
-  return (
+  async function compare() {
+    setBusy(true); setErr(null);
+    try { await api(`/projects/${full.project.id}/options`, { method: "POST" }); await reload(); goTab("chat"); } catch (e) { setErr(toNotice(e)); } finally { setBusy(false); }
+  }
+  return (<>
+    <div className="quick-start"><strong>Not sure about this layout?</strong>
+      <p className="fine">See up to three alternatives for the same plot, side by side, with Vastu score, area, cost per sq ft and open checks. Nothing changes until you choose one.</p>
+      <button className="btn" disabled={busy} onClick={compare}>{busy ? "Working…" : "Compare layout options"}</button></div>
     <details className="quick"><summary>Quick edits (proposed first, saved only when you confirm)</summary>
       <div className="grid2">
         <label>Opening<select value={mark} onChange={e => { setMark(e.target.value); setW(String(ops.find((o: any) => o.mark === e.target.value)?.width ?? "")); }}><option value="">Choose…</option>{ops.map((o: any) => <option key={o.mark} value={o.mark}>{o.mark} · {o.type} · {Math.round(o.width)} mm</option>)}</select></label>
@@ -130,6 +137,6 @@ function QuickEdits({ full, reload, goTab }: { full: Full; reload: () => Promise
         <button className="btn sm" disabled={busy} onClick={() => submit("Move the staircase to the front", [{ op: "move_stair", position: "front" }])}>Front</button>
         <button className="btn sm" disabled={busy} onClick={() => submit("Move the staircase to the rear", [{ op: "move_stair", position: "rear" }])}>Rear</button></div>
       <ErrorBox n={err} onClose={() => setErr(null)} />
-    </details>
+    </details></>
   );
 }

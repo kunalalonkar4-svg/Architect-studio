@@ -129,3 +129,29 @@ def test_future_floors_enlarge_column_and_footing():
     later = prelim(m, planned_floors=3)
     assert later["sizes"]["col_d"] >= now["col_d"] and later["sizes"]["footing"] > now["footing"]
     assert "allowed for later" in later["assumptions"]["storeys"]
+
+
+def test_variants_are_different_valid_and_measured():
+    from app.engine.variants import make_variants
+    b = brief()
+    base = build_model(b)
+    vs = make_variants(b, base, False)
+    assert 1 <= len(vs) <= 3
+    from app.engine.variants import _sig
+    sigs = {_sig(v["model"]) for v in vs}
+    assert len(sigs) == len(vs) and _sig(base) not in sigs
+    for v in vs:
+        assert v["metrics"]["vastu"] is not None and v["metrics"]["cost_per_sqft_inr"] > 0 and v["ops"]
+
+
+def test_options_endpoint_creates_choosable_proposal(client, auth):
+    from conftest import make_user
+    from test_acceptance_2_3 import make_project
+    pid = make_project(client, auth, views=None)
+    r = client.post(f"/api/projects/{pid}/options", headers=auth)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["options"] and d["current"]["vastu"] is not None
+    c = client.post(f"/api/proposals/{d['proposal_id']}/confirm", json=dict(option=0), headers=auth)
+    assert c.status_code == 200 and c.json()["revision"]["number"] == 2
+    assert client.post(f"/api/projects/{pid}/options", headers=make_user(client, "Ravi")).status_code == 404

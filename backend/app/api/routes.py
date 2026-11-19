@@ -26,7 +26,7 @@ from ..engine.sheets import SheetOverflow
 from ..models import AIUsage, Artifact, Attachment, Job, Message, Project, Proposal, Revision, User, now
 from ..security import current_user, hash_password, make_token, owned_project, verify_password
 from ..services import (ServiceError, affected_sheets, autofit, create_revision, enqueue_export, enqueue_render, evaluate_edit, precheck_export,
-                        sheet_meta, sheet_meta_for)
+                        new_proposal, sheet_meta, sheet_meta_for)
 
 router = APIRouter(prefix="/api")
 
@@ -621,6 +621,33 @@ def create_export(pid: str, b: ExportIn, u: User = Depends(current_user), db: Se
     j = enqueue_export(db, p, rev, params)
     db.commit()
     return dict(job=job_json(db, j))
+
+
+@router.post("/projects/{pid}/options")
+def layout_options(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Offer up to three alternative layouts, each with Vastu score, area, cost per sq ft and open checks. The user picks one in the app."""
+    from ..engine.edits import EditError
+    from ..engine.variants import make_variants, measures
+    from ..ai.ops import _room_dims
+    from ..engine.validate import validate_model
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "Generate a first layout before comparing options.", ["Generate the layout first"], status=404))
+    brief, base = Brief.model_validate(rev.brief), ProjectModel.model_validate(rev.model)
+    try:
+        vs = make_variants(brief, base, p.use_assumptions)
+    except EditError as e:
+        return svc_error(ServiceError(e.code, e.message, e.options))
+    if not vs:
+        return svc_error(ServiceError("no_alternatives", "No different layout fits this plot with the current brief.", ["Change the plot, bedrooms or open space and try again"]))
+    opts = [dict(label=v["label"], tradeoff=v["tradeoff"], ops=v["ops"], rooms=_room_dims(v["model"]), metrics=v["metrics"],
+                 stair=v["model"].stairs[0].flight.model_dump() if v["model"].stairs and v["model"].stairs[0].flight else None,
+                 issues=[i for i in validate_model(v["model"]) if i["severity"] != "info"]) for v in vs]
+    pr = new_proposal(db, p, rev, "options", [], [], "Compare these layouts and choose one", [], [], options=opts)
+    db.add(Message(project_id=p.id, role="system", content="Layout options are ready to compare.", events=[dict(type="options", proposal_id=pr.id)]))
+    db.commit()
+    return dict(proposal_id=pr.id, current=measures(brief, base), options=[dict(label=o["label"], metrics=o["metrics"]) for o in opts])
 
 
 @router.get("/projects/{pid}/estimate")

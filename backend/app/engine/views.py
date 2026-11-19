@@ -255,6 +255,31 @@ def _door_for(model: ProjectModel, key: str):
     return None
 
 
+def _wardrobe(b: B, model: ProjectModel, s, rect, occ):
+    """A 600 mm deep wardrobe in a corner of the room that clears the bed, doors (with their swing) and windows."""
+    x0, y0, x1, y1 = rect
+    w, h = x1 - x0, y1 - y0
+    d = 600.0
+    blocks = list(occ)
+    for o in model.openings:
+        if s.key not in (o.from_space, o.to_space):
+            continue
+        m = 950.0 if o.type == "door" else 150.0
+        blocks.append((o.cx - o.width / 2 - m, o.cy - o.width / 2 - m, o.cx + o.width / 2 + m, o.cy + o.width / 2 + m))
+    for ln in (1800.0, 1500.0, 1200.0):
+        cands = [(x0, y0, x0 + ln, y0 + d), (x1 - ln, y0, x1, y0 + d), (x0, y1 - d, x0 + ln, y1), (x1 - ln, y1 - d, x1, y1),
+                 (x0, y0, x0 + d, y0 + ln), (x1 - d, y0, x1, y0 + ln), (x0, y1 - ln, x0 + d, y1), (x1 - d, y1 - ln, x1, y1)]
+        for (a, c, e, f) in cands:
+            if e - a > w + 1 or f - c > h + 1:
+                continue
+            if any(min(e, q) - max(a, p) > 1 and min(f, r) - max(c, t) > 1 for (p, t, q, r) in blocks):
+                continue
+            b.rect(a, c, e, f, "A-FURN")
+            b.line(a, c, e, f, "A-FURN")          # diagonal marks a wardrobe on plan
+            b.text((a + e) / 2, (c + f) / 2, "WARDROBE", 1.4, "A-ANNO-TEXT", "c", "m", 0.0 if e - a >= f - c else 90.0)
+            return
+
+
 def draw_furniture(b: B, model: ProjectModel):
     for s in model.spaces:
         x0, y0, x1, y1 = clear_rect(model, s)
@@ -273,10 +298,12 @@ def draw_furniture(b: B, model: ProjectModel):
             far = {"bottom": None}
             door_edge = min({"bottom": abs(dy - y0), "top": abs(dy - y1), "left": abs(dx - x0), "right": abs(dx - x1)}.items(), key=lambda kv: kv[1])[0]
             far_edge = {"bottom": "top", "top": "bottom", "left": "right", "right": "left"}[door_edge]
+            occ: list[tuple[float, float, float, float]] = []
             if far_edge in ("top", "bottom"):
                 bx0 = cx - bw / 2
                 by0 = (y1 - bl - 100) if far_edge == "top" else (y0 + 100)
                 b.rect(bx0, by0, bx0 + bw, by0 + bl, "A-FURN")
+                occ.append((bx0 - 450, by0, bx0 + bw + 450, by0 + bl))
                 py = by0 + bl - 450 if far_edge == "top" else by0
                 for px in (bx0 + 100, bx0 + bw / 2 + 50):
                     b.rect(px, py + (0 if far_edge == "bottom" else 0), px + bw / 2 - 150, py + 450, "A-FURN")
@@ -286,6 +313,8 @@ def draw_furniture(b: B, model: ProjectModel):
                 bx0 = (x1 - bl - 100) if far_edge == "right" else (x0 + 100)
                 by0 = cy - bw / 2
                 b.rect(bx0, by0, bx0 + bl, by0 + bw, "A-FURN")
+                occ.append((bx0, by0 - 100, bx0 + bl, by0 + bw + 100))
+            _wardrobe(b, model, s, (x0, y0, x1, y1), occ)
         elif s.kind == "kitchen":
             ext_edges = []
             # counter along the longest wall that is exterior (window wall) else bottom

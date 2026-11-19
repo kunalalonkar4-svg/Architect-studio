@@ -132,3 +132,4 @@ fieldset{border-radius:var(--r);background:transparent}
 .rv-mark{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.85rem;border:2px solid currentColor}
 .rv.ok .rv-mark{color:var(--ok)}.rv.warn .rv-mark{color:var(--warn)}.rv.fail .rv-mark{color:var(--err)}.rv.info .rv-mark{color:var(--mute)}
 .rv.fail{border-color:#e6b8b4;background:#fdf1f0}.rv.warn{border-color:#ecd48a;background:#fffbee}
+.metrics{display:flex;flex-wrap:wrap;gap:4px 10px;margin:.3em 0;font-size:.82rem}.metrics span{background:#eef2f6;border:1px solid var(--line);border-radius:99px;padding:.05em .6em}
