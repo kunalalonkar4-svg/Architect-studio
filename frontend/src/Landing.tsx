@@ -1,13 +1,50 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Auth from "./Auth";
 import { AiStatus, User } from "./api";
 import "./landing.css";
 
-const FEATURES = [
-  ["#efe3fb", "Create new plans", "Tell Drafta your plot size and how many bedrooms. It designs the rooms, doors, windows and stair for you.", "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"],
-  ["#dff4f1", "Design and iterate", "Ask for a bigger kitchen or a bedroom upstairs in plain words. You confirm each change before it is applied.", "M4 20l4-1 11-11-3-3L5 16zM14 6l3 3"],
-  ["#fde8dc", "Export and estimate", "Download vector PDF, DXF for CAD and an Excel bill of quantities with live formulas.", "M12 4v11M7 11l5 5 5-5M5 20h14"],
+interface Feat { key: string; icon: string; title: string; text: string; points: string[]; mode: string; prompt: string; steps: string[]; img?: string; alt?: string }
+const FEATS: Feat[] = [
+  { key: "plan", icon: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z", title: "Plan", mode: "Plan",
+    text: "Say your plot size and rooms the way you would to an architect. Drafta draws a dimensioned plan, to scale.",
+    points: ["Feet or metres, any plot size", "English, Hindi or Hinglish", "Asks for the plot size if you forget it"],
+    prompt: "20×50 plot, road on the east. 2 BHK with parking.", steps: ["Reading the plot and road side", "Placing rooms, doors and stair", "Dimensioning the sheet"],
+    img: "/samples/s20x50-plan.jpg", alt: "Dimensioned floor plan of a 20 by 50 foot 2 BHK house" },
+  { key: "elev", icon: "M3 20h18M5 20V9l7-5 7 5v11M10 20v-6h4v6", title: "Elevations and sections", mode: "Elevation",
+    text: "Ask for the front elevation or a section. You get a 2D drawing with levels and a scale, from the same plan.",
+    points: ["Four elevations with levels and openings", "Sections through slab, stair and floor heights", "Every sheet changes when the plan changes"],
+    prompt: "Show me the front elevation in scale.", steps: ["Reading floor heights from the plan", "Projecting openings to the wall", "Adding levels and scale"],
+    img: "/samples/d40x50-elevations.jpg", alt: "Elevation sheet of a 40 by 50 foot duplex" },
+  { key: "checks", icon: "M12 3l8 3v6c0 4.5-3.3 7.8-8 9-4.7-1.2-8-4.5-8-9V6zM9 12l2 2 4-4", title: "Vastu and checks", mode: "Check",
+    text: "Ask if the plan follows Vastu, or if a room gets enough light. The answer comes from the real drawing, with numbers.",
+    points: ["Vastu score by room, with what to move", "Light and ventilation per room", "Column spans flagged for review"],
+    prompt: "Check this plan for Vastu and tell me what to fix.", steps: ["Reading room positions", "Scoring each room against Vastu rules", "Listing fixes, nothing changed yet"] },
+  { key: "cols", icon: "M6 4h12M6 20h12M9 4v16M15 4v16", title: "Column placement", mode: "Structure",
+    text: "Ask for columns and a grid appears. Ask to add, remove or move one by name. Hand-placed columns are marked.",
+    points: ["Column grid with labels C1, C2…", "“Move C3 300 mm east” in plain words", "Marked preliminary, for your engineer to design"],
+    prompt: "Place the structural columns and show the grid.", steps: ["Snapping columns to wall corners", "Numbering the grid", "Marking the sheet preliminary"],
+    img: "/samples/d40x50-structure.jpg", alt: "Preliminary structure sheet with column grid" },
+  { key: "share", icon: "M12 4v11M7 9l5-5 5 5M5 20h14", title: "3D view and sharing", mode: "Share",
+    text: "Turn the plan into a 3D model you can orbit. Send a link so family and your engineer can look and comment.",
+    points: ["Orbit the building in 3D", "Share link with view-only access", "Comments collected on the project"],
+    prompt: "Create a link I can send to my family.", steps: ["Building the 3D model", "Creating a private link", "Waiting for comments"] },
 ];
+
+const MORE: [string, string, string][] = [
+  ["M4 4h16v16H4zM4 12h16M12 4v16", "Drawing set", "Cover, site, floor plans, roof, elevations, sections, schedules."],
+  ["M4 20l4-1 11-11-3-3L5 16z", "Plain-words edits", "Ask for a bigger kitchen. You confirm each change first."],
+  ["M12 4v11M7 11l5 5 5-5M5 20h14", "PDF, DXF and PNG", "Vector PDF, DXF for CAD and PNG sheets."],
+  ["M5 5h14v14H5zM9 9h6M9 13h6", "Excel estimate", "Bill of quantities with live formulas and your own rates."],
+  ["M4 16l5-8 4 5 3-3 4 6z", "Irregular plots", "Enter plot corners. The building is fitted inside the setbacks."],
+  ["M12 8v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z", "Revisions", "Every change is a saved revision you can go back to."],
+  ["M4 6h16M4 12h16M4 18h10", "Contractor checklist", "Build stages, specification notes and questions to ask."],
+  ["M3 12h4l2-6 4 12 2-6h6", "MEP concept", "Plumbing, electrical and drainage as a concept layout."],
+  ["M12 3v18M3 12h18", "Hindi and Hinglish", "Write in the language you think in."],
+  ["M7 4h10v16H7zM10 8h4", "Review checklist", "A list for your architect to confirm before anything is final."],
+  ["M4 20V8l8-4 8 4v12M9 20v-6h6v6", "Free samples", "Open a finished sample project with no sign-up."],
+  ["M12 3l8 3v6c0 4.5-3.3 7.8-8 9-4.7-1.2-8-4.5-8-9V6z", "Private by default", "Your projects are yours. Links are opt-in."],
+];
+
 const SHEETS: [string, string, string][] = [
   ["G-001", "Cover and drawing index", "Project data, plot, areas, sheet list"],
   ["A-101", "Site plan", "Plot, setbacks, building footprint, north"],
@@ -16,29 +53,47 @@ const SHEETS: [string, string, string][] = [
   ["A-201", "Elevations", "Four sides with levels and openings"],
   ["A-301", "Sections", "Slabs, stair and floor heights"],
   ["A-401", "Schedules", "Doors, windows and room areas"],
-  ["S-101", "Structure (preliminary)", "Column grid and beam layout for review"],
-];
-const STEPS = [
-  ["Tell us the plot", "Say it the way you would to an architect: “40×50 duplex, 4 BHK, road on the south.” English, Hindi or Hinglish."],
-  ["Drafta designs the plan", "Rooms are placed and checked. Anything that does not fit is fixed before you see it."],
-  ["Review and change", "Ask for edits in plain words. Each change is saved as a revision you can go back to."],
-  ["Export the set", "PDF, DXF, PNG and an Excel estimate, ready to share with your engineer."],
+  ["S-101", "Structure (preliminary)", "Column grid for your engineer to review"],
 ];
 
-const PROMPTS = ["20×40 plot, 2 BHK, road on the east", "40×50 duplex, 4 BHK with parking", "30×50, 3 BHK, Vastu friendly", "Plot 20×50, shop below and flat above"];
-function useTyping() {
-  const [i, setI] = useState(0); const [n, setN] = useState(0);
+function Icon({ d, size = 20 }: { d: string; size?: number }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden><path d={d} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function Demo({ f }: { f: Feat }) {
+  const [n, setN] = useState(0); const [step, setStep] = useState(0);
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(PROMPTS[0].length); return; }
-    const full = n >= PROMPTS[i].length;
-    const t = setTimeout(() => { if (full) { setI((i + 1) % PROMPTS.length); setN(0); } else setN(n + 1); }, full ? 1800 : 55);
-    return () => clearTimeout(t);
-  }, [i, n]);
-  return PROMPTS[i].slice(0, n);
+    setN(0); setStep(0);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(f.prompt.length); return; }
+    let i = 0; const t = setInterval(() => { i++; setN(i); if (i >= f.prompt.length) clearInterval(t); }, 28);
+    const s = setInterval(() => setStep(x => (x + 1) % f.steps.length), 1700);
+    return () => { clearInterval(t); clearInterval(s); };
+  }, [f.key]);
+  const done = n >= f.prompt.length;
+  return (
+    <div className="lp-demo" aria-label={`Example: ${f.title}`}>
+      <div className="lp-demo-body">
+        <div className="lp-u">{f.prompt.slice(0, n)}{!done && <i className="caret" aria-hidden />}</div>
+        {done && (f.img
+          ? <div className="lp-r"><div className="lp-think"><span className="dotsrow" aria-hidden><i /><i /><i /></span> Drafta drew this</div><img src={f.img} alt={f.alt} loading="lazy" /></div>
+          : <div className="lp-r"><div className="lp-think"><span className="dotsrow" aria-hidden><i /><i /><i /></span> Drafta is working</div><div className="lp-step" key={step}>{f.steps[step]}</div></div>)}
+      </div>
+      <div className="lp-compose"><span aria-hidden>+</span><em>Ask anything about your plan…</em><b>{f.mode}</b><i aria-hidden><svg viewBox="0 0 20 20" width="12" height="12"><path d="M10 16V4M5 9l5-5 5 5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></i></div>
+    </div>
+  );
 }
 
 export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus) => void }) {
-  const [auth, setAuth] = useState(false); const [menu, setMenu] = useState(false); const typed = useTyping();
+  const [auth, setAuth] = useState(false); const [menu, setMenu] = useState(false); const [active, setActive] = useState(0);
+  const refs = useRef<(HTMLElement | null)[]>([]);
+  useEffect(() => {
+    if (auth || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(es => {
+      es.forEach(e => { if (e.isIntersecting) setActive(Number((e.target as HTMLElement).dataset.i)); });
+    }, { rootMargin: "-40% 0px -45% 0px" });
+    refs.current.forEach(r => r && io.observe(r));
+    return () => io.disconnect();
+  }, [auth]);
   if (auth) return (
     <div className="lp-authwrap">
       <button className="lp-back" onClick={() => setAuth(false)}>Back to home</button>
@@ -46,63 +101,48 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
     </div>
   );
   const go = () => { setAuth(true); window.scrollTo(0, 0); };
-  const Cta = ({ label = "Get started for free" }: { label?: string }) => (
-    <button className="lp-cta" onClick={go}>{label}<span aria-hidden><svg viewBox="0 0 20 20" width="14" height="14"><path d="M4 10h11M11 5l5 5-5 5" fill="none" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></span></button>
-  );
+  const f = FEATS[active];
   return (
     <div className="lp">
       <header className="lp-nav">
         <a className="lp-brand" href="#top"><span className="logo-mark" aria-hidden /> Drafta</a>
         <nav className={menu ? "open" : ""} aria-label="Sections" onClick={() => setMenu(false)}>
-          <a href="#/sample">Try a sample</a><a href="#features">Features</a><a href="#set">Drawing set</a><a href="#how">How it works</a><a href="#limits">Limits</a>
-          <button className="lp-link" onClick={go}>Sign in</button>
+          <a href="#features">Features</a><a href="#set">Drawing set</a><a href="#more">More</a><a href="#/sample">Try a sample</a><a href="#limits">Limits</a>
+          <button className="lp-signin" onClick={go}>Sign in</button>
         </nav>
+        <button className="lp-pillbtn dark lp-navcta" onClick={go}>Try for free</button>
         <button className="lp-menu" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}><span /><span /></button>
       </header>
 
       <section className="lp-hero" id="top">
-        <h1>The AI house plan studio</h1>
-        <p>Design residential plans with AI. Give your plot size and BHK, and get the full drawing set and an estimate.</p>
-        <Cta />
-        <div className="lp-frame">
-          <div className="lp-win">
-            <div className="lp-win-bar"><span>Projects <i>/</i> <b>My new house</b></span><span className="lp-pill">Export</span></div>
-            <div className="lp-win-body">
-              <div className="lp-chat">
-                <div className="a">Let’s draft your dream build. What is your plot size and how many bedrooms?</div>
-                <div className="in"><span>{typed}<i className="caret" aria-hidden /></span><b aria-hidden><svg viewBox="0 0 20 20" width="12" height="12"><path d="M10 16V4M5 9l5-5 5 5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></b></div>
-              </div>
-            </div>
-          </div>
+        <div className="lp-eyebrow"><span className="logo-mark" aria-hidden /> Drafta <i /> <span>AI house plan studio for the web</span></div>
+        <h1>House plans that are<br />useful for everyone.</h1>
+        <p>Chat, draw and check — all in one place. Tell Drafta your plot, and get plans, elevations, columns and an estimate.<br />Speaks English, Hindi and Hinglish.</p>
+        <div className="lp-ctas">
+          <button className="lp-pillbtn dark" onClick={go}>Try Drafta <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+          <a className="lp-pillbtn light" href="#/sample">See a sample</a>
         </div>
       </section>
 
-      <section className="lp-sec" id="features">
-        <h2>The future of home design</h2>
-        <p className="lead">Generate new layouts, refine them in plain words, and take the drawings straight to your engineer.</p>
-        <div className="lp-cards">
-          {FEATURES.map(f => (
-            <article key={f[1]} className="lp-card"><div className="in">
-              <span className="ic" style={{ background: f[0] }}><svg viewBox="0 0 24 24" width="18" height="18"><path d={f[3]} fill="none" stroke="#222" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-              <h3>{f[1]}</h3><p>{f[2]}</p></div>
-            </article>))}
+      <section className="lp-feat" id="features">
+        <div className="lp-feat-list">
+          {FEATS.map((x, i) => (
+            <article key={x.key} data-i={i} ref={el => { refs.current[i] = el; }} className={i === active ? "on" : ""}>
+              <h2><Icon d={x.icon} size={30} /> {x.title}</h2>
+              <p>{x.text}</p>
+              <ul>{x.points.map(p => <li key={p}><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden><path d="M4 10.5l4 4 8-9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>{p}</li>)}</ul>
+            </article>
+          ))}
         </div>
-      </section>
-
-      <section className="lp-sec" id="canvas">
-        <h2>Your plan, drawn to scale</h2>
-        <p className="lead">Plans, elevations and sections appear on the canvas as you chat. Every line is dimensioned.</p>
-        <div className="lp-frame"><div className="lp-win"><img className="lp-shot" loading="lazy" src="/samples/d40x50-plan.jpg" alt="Floor plan sheet of a 40 by 50 foot duplex" width="1800" height="1009" /></div></div>
+        <div className="lp-feat-card"><div className="sticky"><Demo f={f} /></div></div>
       </section>
 
       <section className="lp-sec" id="set">
         <h2>A real drawing set</h2>
         <p className="lead">Every project comes with the sheets an architect would hand over for a house, numbered and indexed.</p>
         <div className="lp-gal">
-          <figure><img loading="lazy" src="/samples/s20x50-plan.jpg" alt="Plan of a 20 by 50 foot 2 BHK house" /><figcaption>20 × 50 ft, 2 BHK plan</figcaption></figure>
-          <figure><img loading="lazy" src="/samples/d40x50-elevations.jpg" alt="Elevation sheet" /><figcaption>Elevations</figcaption></figure>
+          <figure><img loading="lazy" src="/samples/d40x50-plan.jpg" alt="Floor plan sheet of a 40 by 50 foot duplex" /><figcaption>Plan, 40 × 50 ft duplex</figcaption></figure>
           <figure><img loading="lazy" src="/samples/d40x50-section.jpg" alt="Section sheet" /><figcaption>Section</figcaption></figure>
-          <figure><img loading="lazy" src="/samples/d40x50-structure.jpg" alt="Preliminary structure sheet" /><figcaption>Structure, preliminary</figcaption></figure>
         </div>
         <div className="lp-table"><table>
           <thead><tr><th scope="col">Sheet</th><th scope="col">Title</th><th scope="col">Shows</th></tr></thead>
@@ -110,25 +150,26 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
         </table></div>
       </section>
 
-      <section className="lp-sec" id="how">
-        <h2>How it works</h2>
-        <div className="lp-cards four">
-          {STEPS.map((s, i) => <article key={i} className="lp-card"><span className="num" aria-hidden>{i + 1}</span><h3>{s[0]}</h3><p>{s[1]}</p></article>)}
+      <section className="lp-sec" id="more">
+        <h2>And much more</h2>
+        <p className="lead">Everything you need from first idea to a set you can hand to your engineer.</p>
+        <div className="lp-more">
+          {MORE.map(m => <div key={m[1]}><Icon d={m[0]} /><h3>{m[1]}</h3><p>{m[2]}</p></div>)}
         </div>
       </section>
 
-      <section className="lp-sec" id="boq">
-        <h2>An estimate you can edit</h2>
-        <p className="lead">The bill of quantities opens in Excel. Change a rate and the totals update.</p>
-        <div className="lp-table narrow" role="img" aria-label="Sample bill of quantities rows"><table>
-          <thead><tr><th>Item</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
-          <tbody>
-            <tr><td>Excavation in foundation</td><td>cum</td><td>62.4</td><td>350</td><td>21,840</td></tr>
-            <tr><td>RCC M25 in columns and beams</td><td>cum</td><td>31.8</td><td>9,200</td><td>292,560</td></tr>
-            <tr><td>Brick masonry, 230 mm</td><td>cum</td><td>48.2</td><td>6,100</td><td>294,020</td></tr>
-            <tr><td>Plaster, 12 mm cement</td><td>sqm</td><td>612</td><td>310</td><td>189,720</td></tr>
-          </tbody></table></div>
-        <p className="fine">Sample rows. Rates are placeholders; set your local rates in the estimate panel.</p>
+      <section className="lp-sec" id="start">
+        <h2>Get started</h2>
+        <p className="lead">Free to try on the web. Sign up with your email.</p>
+        <div className="lp-steps">
+          <div><small>01</small><h3>Open Drafta</h3><p>Go to the web app. Nothing to install.</p></div>
+          <div><small>02</small><h3>Sign in</h3><p>Use your email to keep every project in one place.</p></div>
+          <div><small>03</small><h3>Start chatting</h3><p>Describe your plot. Ask for plans, elevations, columns or a Vastu check.</p></div>
+        </div>
+        <div className="lp-ctas">
+          <button className="lp-pillbtn dark" onClick={go}>Open Drafta <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+          <a className="lp-pillbtn light" href="#/sample">Try a sample</a>
+        </div>
       </section>
 
       <section className="lp-sec" id="limits">
@@ -136,15 +177,18 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
         <ul className="lp-limits">
           <li>These are concept drawings. They are not stamped, approved or ready for construction.</li>
           <li>Structure sheets are preliminary. A licensed structural engineer must design and sign the real thing.</li>
-          <li>Check setbacks, FAR and permissions with your local authority and a licensed architect before building.</li>
+          <li>Vastu, light and ventilation results are guidance. Check setbacks, FAR and permissions with your local authority and a licensed architect before building.</li>
         </ul>
       </section>
 
-      <section className="lp-final">
-        <h2>Start with your plot size</h2>
-        <Cta />
-      </section>
-      <footer className="lp-foot"><span>Drafta</span><span>Concept drawings only. Not a substitute for a licensed professional.</span></footer>
+      <footer className="lp-foot">
+        <div className="lp-foot-in">
+          <div><span className="lp-brand"><span className="logo-mark" aria-hidden /> Drafta</span><p>Concept drawings only. Not a substitute for a licensed professional.</p></div>
+          <div><h4>Product</h4><a href="#features">Features</a><a href="#set">Drawing set</a><a href="#more">More</a></div>
+          <div><h4>Try</h4><a href="#/sample">Sample project</a><button className="lp-link" onClick={go}>Sign in</button></div>
+          <div><h4>Good to know</h4><a href="#limits">Limits</a></div>
+        </div>
+      </footer>
     </div>
   );
 }
