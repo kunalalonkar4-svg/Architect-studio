@@ -25,7 +25,7 @@ export default function Chat({ full, reload, goTab }: Props) {
   const archived = full.project.status === "archived";
   const busy = live !== null;
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [full.messages.length, live?.text, live?.events.length, full.proposals.length]);
+  useEffect(() => { if (full.messages.length || live) endRef.current?.scrollIntoView({ block: "end" }); }, [full.messages.length, live?.text, live?.events.length, full.proposals.length]);
   useEffect(() => { setPending([]); setText(""); setErr(null); }, [pid]);
 
   async function send(content: string, opts: { consent?: boolean; retry_of?: string; ids?: string[] } = {}) {
@@ -76,10 +76,11 @@ export default function Chat({ full, reload, goTab }: Props) {
       <div className="msgs" role="log" aria-live="polite" aria-relevant="additions text">
         {full.messages.length === 0 && !busy && (
           <div className="empty-chat">
-            <h3>Tell me what you want to build</h3>
+            <div className="hello"><span className="logo-mark" aria-hidden /></div>
+            <h3>What shall we design today?</h3>
             <p className="muted">Plain language is fine — English, Hindi or Hinglish. You can attach a sketch, a PDF or notes (optional). I’ll summarise your brief and ask only what I really need.</p>
             <QuickStart disabled={busy || archived} onSend={t => send(t)} />
-            <p className="muted">Ya apne shabdon mein likho:</p>
+            <p className="muted eyebrow">Or just describe it in your own words</p>
             <div className="chips">{STARTERS.map(s => <button key={s} className="chip" onClick={() => setText(s)}>{s}</button>)}</div>
           </div>
         )}
@@ -89,7 +90,7 @@ export default function Chat({ full, reload, goTab }: Props) {
         {live && (
           <div className="msg assistant">
             <div className="bubble">
-              {live.text ? <div className="txt">{live.text}</div> : !live.error && <Spinner label="Thinking…" />}
+              {live.text ? <div className="txt">{live.text}</div> : !live.error && <span className="dots" role="status" aria-label="Thinking"><i /><i /><i /></span>}
               {live.events.map((e, i) => <EventView key={i} e={e} full={full} onReply={t => send(t)} goTab={goTab} />)}
               {live.error && <ErrorBox n={live.error} />}
             </div>
