@@ -10,12 +10,13 @@ export function parseHash(h: string): Route | null {
   return null;
 }
 const home = () => { location.hash = ""; };
+const back = () => { location.hash = /^#\/sample\/.+/.test(location.hash) ? "#/sample" : ""; };
 const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 
 function Shell({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div className="pub">
-      <header><span className="brand small"><span className="logo-mark" aria-hidden /> Drafta</span><button className="btn sm" onClick={home}>Start your own project</button></header>
+      <header><div className="pub-l"><button className="btn sm back" onClick={back} aria-label="Back">← Back</button><span className="brand small"><span className="logo-mark" aria-hidden /> Drafta</span></div><button className="btn sm" onClick={home}>Start your own project</button></header>
       <div className="pub-body"><h2>{title}</h2>{sub && <p className="muted">{sub}</p>}{children}</div>
     </div>
   );

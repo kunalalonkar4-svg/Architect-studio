@@ -28,7 +28,7 @@ export default function App() {
       {wide ? <aside className="side-fixed">{side}</aside> : drawer && <div className="drawer-bg" onClick={() => setDrawer(false)}><aside className="drawer" onClick={e => e.stopPropagation()}>{side}</aside></div>}
       <main className="main">
         {!wide && <div className="topbar"><button className="btn ghost" aria-label="Open project list" onClick={() => setDrawer(true)}>☰ Projects</button><span className="brand small"><span className="logo-mark" aria-hidden /> Drafta</span></div>}
-        {pid ? <Workspace key={pid} pid={pid} onListChanged={bump} /> : (
+        {pid ? <Workspace key={pid} pid={pid} onListChanged={bump} onBack={() => (wide ? setPid(null) : setDrawer(true))} /> : (
           <div className="pane-center welcome">
             <h2>Welcome{user.display_name ? `, ${user.display_name}` : ""}</h2>
             <p className="muted">Create a project, then tell us the plot size and BHK. You get the plan, elevations, section and an estimate.</p>

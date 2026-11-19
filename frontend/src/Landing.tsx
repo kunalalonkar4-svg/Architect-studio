@@ -96,7 +96,7 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
   }, [auth]);
   if (auth) return (
     <div className="lp-authwrap">
-      <button className="lp-back" onClick={() => setAuth(false)}>Back to home</button>
+      <button className="lp-back" onClick={() => setAuth(false)}>← Back to home</button>
       <Auth onAuthed={onAuthed} />
     </div>
   );

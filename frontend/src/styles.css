@@ -305,3 +305,9 @@ h1,h2,h3,.ptitle strong,.empty-chat h3,.pane-center h2,.empty-pane h3,.brand,.ev
 .userbtn{color:var(--mute)}
 @media (max-width:979px){.empty-chat{padding-top:3vh}.empty-chat h3{font-size:1.7rem}.composer{padding:6px 10px 10px}}
 .compose-row textarea{min-height:48px;line-height:1.4}.pills{gap:6px}.pill{padding:.4em .85em}
+/* back buttons */
+.btn.back{flex:none;gap:.3em;font-weight:500;color:var(--ink);padding:.25em .7em}
+.wshead{justify-content:flex-start}.wshead .ptitle{flex:1}.wshead .aibadge{margin-left:auto}
+.modal header .mh-l{display:flex;align-items:center;gap:8px;min-width:0}
+.pub-l{display:flex;align-items:center;gap:12px}
+@media (max-width:520px){.btn.back{padding:.25em .55em}}

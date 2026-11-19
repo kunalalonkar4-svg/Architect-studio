@@ -25,9 +25,10 @@ export function useWide() {
   return w;
 }
 
-export default function Workspace({ pid, onListChanged }: { pid: string; onListChanged: () => void }) {
+export default function Workspace({ pid, onListChanged, onBack }: { pid: string; onListChanged: () => void; onBack: () => void }) {
   const [full, setFull] = useState<Full | null>(null); const [err, setErr] = useState<Notice | null>(null);
-  const [tab, setTab] = useState<Tab>("chat"); const wide = useWide();
+  const [tab, setTabRaw] = useState<Tab>("chat"); const [hist, setHist] = useState<Tab[]>([]); const wide = useWide();
+  const tabRef = useRef<Tab>("chat"); tabRef.current = tab;
   const cur = useRef(pid); cur.current = pid;
 
   const reload = useCallback(async () => {
@@ -35,7 +36,9 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
     try { const r: Full = await api(`/projects/${id}`); if (cur.current === id) { setFull(r); setErr(null); } } catch (e) { if (cur.current === id) setErr(toNotice(e)); }
     onListChanged();
   }, [pid]);
-  useEffect(() => { setFull(null); setErr(null); setTab("chat"); reload(); }, [pid]);
+  const setTab = (t: Tab) => { if (t === tabRef.current) return; setHist(h => [...h.slice(-19), tabRef.current]); setTabRaw(t); };
+  useEffect(() => { setFull(null); setErr(null); setTabRaw("chat"); setHist([]); reload(); }, [pid]);
+  const goBack = () => { if (hist.length) { const t = hist[hist.length - 1]; setHist(h => h.slice(0, -1)); setTabRaw(t); } else onBack(); };
 
   const active = !!full && (full.current?.render_status === "pending" || full.current?.render_status === "running" || full.jobs.some(j => j.state === "queued" || j.state === "running"));
   const sig = (x: { render_status: string | null; jobs: { id: string; state: string; progress: number }[] }) => x.render_status + "|" + x.jobs.map(j => j.id + j.state + Math.round(j.progress * 20)).join(",");
@@ -80,6 +83,7 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
   return (
     <div className="workspace">
       <header className="wshead">
+        <button className="btn ghost sm back" onClick={goBack} aria-label={hist.length ? "Back to previous section" : "Back to projects"}>← Back</button>
         <div className="ptitle"><strong>{full.project.name}</strong>
           <small>{full.current ? `Revision ${full.current.number}` : "No drawing yet"} · {full.project.review_status === "concept_unreviewed" ? "Concept — not reviewed" : "Issued for owner’s review"}</small></div>
         <div className={"aibadge " + (full.ai.live ? "live" : "mock")} title={full.ai.message || `Model ${full.ai.model}`}>{full.ai.live ? "Claude" : "Demo mode"}</div>
