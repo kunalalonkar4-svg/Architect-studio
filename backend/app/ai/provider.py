@@ -246,6 +246,7 @@ class MockProvider:
         if re.search(r"site\s*plan|plot\s*plan", t): kinds.append("site")
         if re.search(r"roof|terrace|chhat", t): kinds.append("roof")
         if re.search(r"structur|column|footing|foundation|beam", t): kinds.append("structure")
+        if re.search(r"electric|plumb|drain|septic|\bmep\b|wiring|bijli|pipe", t): kinds.append("mep")
         if re.search(r"drawing index|cover sheet|\bindex\b|general notes", t): kinds.append("index")
         if FULLSET_RE.search(t):
             kinds = list(FULL_SET_KINDS)

@@ -155,3 +155,52 @@ def test_options_endpoint_creates_choosable_proposal(client, auth):
     c = client.post(f"/api/proposals/{d['proposal_id']}/confirm", json=dict(option=0), headers=auth)
     assert c.status_code == 200 and c.json()["revision"]["number"] == 2
     assert client.post(f"/api/projects/{pid}/options", headers=make_user(client, "Ravi")).status_code == 404
+
+
+def test_mep_points_stacks_and_tank():
+    from app.engine.mep import electrical, plumbing, septic_size
+    m = build_model(brief())
+    e = electrical(m)
+    assert e["db"] is not None and e["counts"]["db"] == 1 and e["counts"]["light"] >= 5 and e["counts"].get("geyser", 0) >= 1
+    assert e["connected_load_kw"] > 3 and any(c["name"] == "Power sockets" for c in e["circuits"])
+    p = plumbing(m)
+    assert p["stacks"] and len(p["chambers"]) == len(p["stacks"]) == len(p["runs"])
+    assert p["septic"]["users"] == 2 * 2 + 1 and p["septic"]["tank"]["length_m"] == 1.5
+    assert p["septic"]["place"] and p["water"]["sump_l"] == p["septic"]["users"] * 135
+    assert septic_size(12)["users_up_to"] == 15 and septic_size(99).get("over_table")
+
+
+def test_septic_placed_inside_plot_with_room_flag():
+    from app.engine.mep import plumbing
+    m = build_model(brief())
+    pl = plumbing(m)["septic"]["place"]
+    W, H = m.plot["w"], m.plot["h"]
+    assert 0 <= pl["cx"] - pl["w"] / 2 and pl["cx"] + pl["w"] / 2 <= W and 0 <= pl["cy"] - pl["h"] / 2 and pl["cy"] + pl["h"] / 2 <= H
+    assert isinstance(pl["fits"], bool)
+
+
+def test_mep_sheet_builds_for_one_and_two_floors():
+    from app.engine.views import build_view
+    from app.services import ensure_sheet
+    for levels, beds, nviews in ((1, 2, 2), (2, 4, 4)):
+        m = build_model(brief(levels_now=levels, bedrooms=beds))
+        sd = ensure_sheet(m, "mep")
+        assert sd.number == "M-101" and len(sd.views) == nviews
+        for vid in sd.views:
+            r = build_view(m, next(v for v in m.views if v.id == vid), 100, {})
+            assert r.prims and "CONCEPT" in r.title
+
+
+def test_drains_stay_inside_plot_and_outside_walls():
+    from app.engine.mep import plumbing
+    for road in "nesw":
+        tight = build_model(brief(road_side=road))                           # no side open space: drains cannot clear the walls
+        roomy = build_model(brief(road_side=road, plot_frontage_mm=12000, setbacks=Setbacks(front=3000, rear=1500, left=1500, right=1500)))
+        for m, must_clear in ((tight, False), (roomy, True)):
+            p, ob, W, H = plumbing(m), m.outer_bounds(), m.plot["w"], m.plot["h"]
+            for r in p["runs"]:
+                for x, y in r["path"][1:]:
+                    assert 0 <= x <= W and 0 <= y <= H, (road, r["stack"], (x, y))
+                    if must_clear:
+                        assert not (ob[0] + 120 < x < ob[2] - 120 and ob[1] + 120 < y < ob[3] - 120), (road, r["stack"], (x, y))
+            assert bool(p["warnings"]) == (not must_clear), (road, must_clear, p["warnings"])

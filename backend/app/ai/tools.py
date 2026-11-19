@@ -10,7 +10,7 @@ LENGTH = {"type": "object", "description": "A length with its unit exactly as th
           "properties": {"value": {"type": "number"}, "unit": {"type": "string", "enum": ["mm", "cm", "m", "ft", "in", "unspecified"]}},
           "required": ["value", "unit"], "additionalProperties": False}
 SIDE = {"type": "string", "enum": ["north", "east", "south", "west"]}
-VIEW_KINDS = ["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
+VIEW_KINDS = ["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure", "mep"]
 FACINGS = ["front", "rear", "left", "right", "north", "east", "south", "west"]
 
 
@@ -39,7 +39,7 @@ class UpdateBrief(Strict):
     stair: Optional[bool] = None
     stair_position: Optional[Literal["front", "rear"]] = None
     future_levels: Optional[list[str]] = None
-    requested_views: Optional[list[Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]]] = None
+    requested_views: Optional[list[Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure", "mep"]]] = None
     constraints: Optional[list[str]] = None
     notes: Optional[str] = None
     language: Optional[Literal["en", "hi", "hinglish"]] = None
@@ -126,7 +126,7 @@ class DesignFloorPlan(Strict):
 
 
 class ViewSpec(Strict):
-    kind: Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
+    kind: Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure", "mep"]
     paper: Optional[Literal["A4", "A3", "A2", "A1", "A0"]] = None
     scale: Optional[Literal[20, 25, 50, 100, 200, 500]] = None
     facings: Optional[list[Literal["front", "rear", "left", "right", "north", "east", "south", "west"]]] = None
@@ -164,7 +164,7 @@ DESCRIPTIONS = {
     "generate_layout": "Generate the first dimensioned ground-floor layout and drawing preview from the brief. use_assumptions=true only when the user agreed to proceed with clearly labelled concept assumptions.",
     "propose_options": "Offer 2-3 alternative layouts (different stair positions). The server computes exact dimensions for each; the user then chooses one.",
     "propose_edit": "Propose changes to the existing design (move stair, resize a room, move a partition wall, change a door/window size, floor height, bedrooms). The server computes all coordinates, shows the changes and affected drawings, and commits only after the user confirms. List rooms the user said to keep unchanged in preserve.",
-    "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index, structure = preliminary column/footing/beam layout). Generate only what the user asked for.",
+    "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index, structure = preliminary column/footing/beam layout, mep = concept electrical points and plumbing/septic layout). Generate only what the user asked for.",
     "request_export": "Start an export (pdf = vector sheets at exact paper size, dxf = layered model-space CAD, png). Do not say a file is ready until the app confirms.",
     "explain_validation": "Read the current validation issues of the active revision so you can explain them to the user in simple language.",
     "design_floor_plan": ("Design the house yourself, as an experienced architect: choose every room, its rectangle and how rooms connect, for ANY plot size, 1-5+ bedrooms, one or two floors. "
