@@ -11,6 +11,13 @@ const STARTERS = [
   "मेरे पास 30 फुट × 50 फुट का प्लॉट है, सड़क पूर्व में है।",
 ];
 
+const PILLS: [string, string][] = [
+  ["Vastu check", "Check this plan for Vastu and tell me what to fix."],
+  ["Place columns", "Place the structural columns and show the column grid."],
+  ["Elevation", "Show me the front elevation in scale."],
+  ["3 BHK plan", "Make a 3 BHK plan for my plot. Ask me the plot size if you need it."],
+];
+
 export default function Chat({ full, reload, goTab }: Props) {
   const pid = full.project.id;
   const [text, setText] = useState("");
@@ -110,12 +117,17 @@ export default function Chat({ full, reload, goTab }: Props) {
         <div className="compose-row">
           <input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,application/pdf,text/plain,.txt" onChange={e => onFile(e.target.files)} />
           <button type="button" className="btn icon" aria-label="Attach file (PNG, JPEG, PDF or text)" title="Attach file" disabled={busy || archived} onClick={() => fileRef.current?.click()}>📎</button>
-          <textarea aria-label="Message" rows={1} value={text} maxLength={6000} disabled={archived} placeholder="Describe your plot, rooms or a change…"
+          <textarea aria-label="Message" rows={1} value={text} maxLength={6000} disabled={archived} placeholder="Ask anything about your plan…"
             onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (text.trim() && !busy) send(text.trim()); } }} />
           {busy
             ? <button type="button" className="btn danger send" aria-label="Stop" title="Stop" onClick={() => abort.current?.abort()}>■</button>
             : <button className="btn primary send" aria-label="Send" title="Send" disabled={!text.trim() || archived}>↑</button>}
         </div>
+        {!busy && !archived && !text && (
+          <div className="pills" aria-label="Quick prompts">
+            {PILLS.map(([l, t]) => <button type="button" key={l} className="pill" onClick={() => setText(t)}>{l}</button>)}
+          </div>
+        )}
       </form>
       {consent && (
         <Modal title="Send files to the AI provider?" onClose={() => setConsent(null)}>
