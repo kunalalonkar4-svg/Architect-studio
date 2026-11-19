@@ -661,6 +661,22 @@ def estimate_api(pid: str, finish: str = "standard", concrete: str = "M20", maso
     return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model), finish, concrete, masonry, region))
 
 
+@router.get("/projects/{pid}/model3d")
+def model3d_api(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Geometry for the 3D view: the same canonical model the drawings come from (millimetres, +y north)."""
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to show in 3D.", ["Generate the layout first"], status=404))
+    m = ProjectModel.model_validate(rev.model)
+    return dict(revision=rev.number, plot=m.plot, ext_t=m.params.ext_t,
+                levels=[l.model_dump() for l in m.levels],
+                walls=[dict(id=w.id, level=w.level, x1=w.x1, y1=w.y1, x2=w.x2, y2=w.y2, t=w.thickness, kind=w.kind) for w in m.walls],
+                openings=[dict(mark=o.mark, level=o.level, type=o.type, cx=o.cx, cy=o.cy, w=o.width, h=o.height, sill=o.sill, host=o.host) for o in m.openings],
+                spaces=[dict(key=s.key, name=s.name, kind=s.kind, level=s.level, x=s.x, y=s.y, w=s.w, h=s.h, open=s.open_boundary) for s in m.spaces],
+                stairs=[dict(level=st.level, x=st.x, y=st.y, w=st.w, h=st.h) for st in m.stairs])
+
+
 @router.get("/projects/{pid}/review")
 def review_api(pid: str, far: float | None = None, coverage: float | None = None, height: float | None = None, window_ratio: float = 0.10, latitude: float | None = None,
                u: User = Depends(current_user), db: Session = Depends(get_db)):

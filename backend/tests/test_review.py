@@ -204,3 +204,14 @@ def test_drains_stay_inside_plot_and_outside_walls():
                     if must_clear:
                         assert not (ob[0] + 120 < x < ob[2] - 120 and ob[1] + 120 < y < ob[3] - 120), (road, r["stack"], (x, y))
             assert bool(p["warnings"]) == (not must_clear), (road, must_clear, p["warnings"])
+
+
+def test_model3d_endpoint_returns_geometry_and_is_private(client, auth):
+    from conftest import make_user, new_project
+    from test_acceptance_2_3 import make_project
+    assert client.get(f"/api/projects/{new_project(client, auth, 'blank')}/model3d", headers=auth).status_code == 404
+    pid = make_project(client, auth, views=None)
+    d = client.get(f"/api/projects/{pid}/model3d", headers=auth).json()
+    assert d["walls"] and d["spaces"] and d["levels"] and d["openings"] and d["plot"]["w"] > 0
+    assert all(set(w) >= {"x1", "y1", "x2", "y2", "t", "level"} for w in d["walls"])
+    assert client.get(f"/api/projects/{pid}/model3d", headers=make_user(client, "Ravi")).status_code == 404
