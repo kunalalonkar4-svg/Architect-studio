@@ -8,6 +8,7 @@ interface Review {
   planning: { measured: Record<string, number>; items: Item[] };
   vastu: { score: number | null; items: Item[]; note: string };
   light_ventilation: { items: Item[] };
+  sun: { latitude: number; latitude_assumed: boolean; items: Item[]; note: string };
   grid: { longest_span_m: number; columns: { x: number; y: number }[]; items: Item[]; note: string };
 }
 const MARK: Record<Item["status"], string> = { ok: "✓", warn: "!", fail: "✕", info: "i" };
@@ -24,8 +25,8 @@ function Rows({ items }: { items: Item[] }) {
 
 export default function ReviewPanel({ full }: { full: Full }) {
   const pid = full.project.id; const revId = full.current?.id; const key = `drafta.limits.${pid}`;
-  const [lim, setLim] = useState<{ far: string; coverage: string; height: string }>(() => {
-    try { return { far: "", coverage: "", height: "", ...JSON.parse(localStorage.getItem(key) || "{}") }; } catch { return { far: "", coverage: "", height: "" }; }
+  const [lim, setLim] = useState<{ far: string; coverage: string; height: string; latitude: string }>(() => {
+    try { return { far: "", coverage: "", height: "", latitude: "", ...JSON.parse(localStorage.getItem(key) || "{}") }; } catch { return { far: "", coverage: "", height: "", latitude: "" }; }
   });
   const [d, setD] = useState<Review | null>(null); const [err, setErr] = useState<Notice | null>(null);
 
@@ -41,7 +42,7 @@ export default function ReviewPanel({ full }: { full: Full }) {
 
   if (!full.current) return <div className="empty-pane"><h3>Nothing to review yet</h3><p className="muted">Generate the drawings first. The review reads the same model as the drawings.</p></div>;
   const m = d?.planning.measured;
-  const field = (id: "far" | "coverage" | "height", label: string, hint: string) => (
+  const field = (id: "far" | "coverage" | "height" | "latitude", label: string, hint: string) => (
     <label>{label}<small> {hint}</small><input inputMode="decimal" value={lim[id]} placeholder="not set" onChange={e => setLim(p => ({ ...p, [id]: e.target.value }))} /></label>
   );
   return (
@@ -75,6 +76,11 @@ export default function ReviewPanel({ full }: { full: Full }) {
 
         <h4>Light and ventilation</h4>
         <Rows items={d.light_ventilation.items} />
+
+        <h4>Sun and shading</h4>
+        <div className="grid2">{field("latitude", "Latitude (° N, negative for south)", "(e.g. 12.9 for Bengaluru)")}</div>
+        <Rows items={d.sun.items} />
+        <p className="fine">{d.sun.note}</p>
 
         <h4>Column grid</h4>
         <p className="fine">{d.grid.columns.length} columns · longest span {d.grid.longest_span_m} m</p>

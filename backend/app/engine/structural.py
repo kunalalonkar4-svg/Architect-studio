@@ -12,9 +12,10 @@ def _up(v: float, step: float) -> float:
     return math.ceil(v / step) * step
 
 
-def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy: float = 500.0, bay_m2: float = 16.0) -> dict:
+def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy: float = 500.0, bay_m2: float = 16.0, planned_floors: int | None = None) -> dict:
     lv = model.levels[0]
-    nlev = len(model.levels)
+    built = len(model.levels)
+    nlev = max(built, planned_floors or built)      # columns and footings are sized for the floors you plan to add later
     rooms = [(s, room_metrics(model, s)) for s in model.spaces if not s.open_boundary]
     spans = [(s.name, sorted([m["clear_w"], m["clear_d"]])) for s, m in rooms]
     short = max((sp[1][0] for sp in spans), default=0.0)            # largest short-span of any slab panel (mm)
@@ -38,7 +39,7 @@ def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy:
     # Steel indicators (rule-of-thumb kg per m3 of concrete)
     return dict(
         sizes=dict(slab=slab_req, beam_d=beam_d, beam_b=230.0, col_b=col_b, col_d=col_d, footing=f_side, footing_depth=f_depth),
-        assumptions=dict(sbc_kn_m2=sbc_kn_m2, concrete=f"M{fck:.0f}", steel=f"Fe{fy:.0f}", tributary_bay_m2=bay_m2, load_kn_m2=w_service, storeys="1 (ground floor + roof slab)" if nlev == 1 else f"{nlev} (ground + first floor + roof slab)"),
+        assumptions=dict(sbc_kn_m2=sbc_kn_m2, concrete=f"M{fck:.0f}", steel=f"Fe{fy:.0f}", tributary_bay_m2=bay_m2, load_kn_m2=w_service, storeys=("1 (ground floor + roof slab)" if nlev == 1 else f"{nlev} (ground + first floor + roof slab)" if nlev == 2 else f"{nlev} floors + roof slab") + (f", {built} built now, {nlev - built} allowed for later" if nlev > built else "")),
         items=[
             dict(id="slab", name="Roof slab thickness", value=f"{slab_req:.0f} mm", status="ok" if slab_ok else "check",
                  basis=f"Largest short panel span {short:.0f} mm ÷ 30 + 25 mm cover, min 125 mm. Model has {lv.slab:.0f} mm.",

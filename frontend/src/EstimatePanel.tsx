@@ -27,18 +27,20 @@ interface Struct { revision: number; assumptions: Record<string, any>; items: SI
 
 function StructureView({ full }: { full: Full }) {
   const pid = full.project.id; const revId = full.current?.id;
-  const [sbc, setSbc] = useState("150"); const [d, setD] = useState<Struct | null>(null); const [err, setErr] = useState<Notice | null>(null);
+  const [sbc, setSbc] = useState("150"); const [floors, setFloors] = useState(""); const [d, setD] = useState<Struct | null>(null); const [err, setErr] = useState<Notice | null>(null);
   useEffect(() => {
     if (!revId) return; let off = false; setErr(null);
-    const t = setTimeout(() => api<Struct>(`/projects/${pid}/structure?sbc=${encodeURIComponent(sbc)}`).then(x => !off && setD(x)).catch(e => !off && setErr(toNotice(e))), 300);
+    const t = setTimeout(() => api<Struct>(`/projects/${pid}/structure?sbc=${encodeURIComponent(sbc)}${floors ? `&floors=${floors}` : ""}`).then(x => !off && setD(x)).catch(e => !off && setErr(toNotice(e))), 300);
     return () => { off = true; clearTimeout(t); };
-  }, [pid, revId, sbc]);
+  }, [pid, revId, sbc, floors]);
   if (!full.current) return <div className="empty-pane"><h3>No drawing yet</h3><p className="muted">Generate the drawings first.</p></div>;
   return (
     <div className="panel">
       <h3>Preliminary structure · revision {d?.revision ?? full.current.number}</h3>
       <div className="banner warn slim">Rough sizes for early planning only. Not a structural design. A licensed structural engineer must design and check everything.</div>
       <label>Soil safe bearing capacity (kN/m²)<small> — from your soil test; 150 is only an assumption</small><input inputMode="decimal" value={sbc} onChange={e => setSbc(e.target.value)} /></label>
+      <label>Floors you may build in total<small> — columns and footings are sized for this, so a later floor needs no strengthening</small>
+        <select value={floors} onChange={e => setFloors(e.target.value)}><option value="">Only what is drawn now</option><option value="2">2 floors</option><option value="3">3 floors</option><option value="4">4 floors</option></select></label>
       <ErrorBox n={err} />
       {!d && !err && <Spinner label="Calculating…" />}
       {d && d.items.map(i => (

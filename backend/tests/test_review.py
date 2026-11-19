@@ -98,3 +98,34 @@ def test_review_endpoint_isolation_and_validation(client, auth):
     assert client.get(f"/api/projects/{pid}/review", headers=make_user(client, "Ravi")).status_code == 404
     e = client.get(f"/api/projects/{pid}/estimate", params=dict(finish="premium", region="metro"), headers=auth).json()
     assert e["options"]["selected"]["finish"] == "premium" and e["cost_per_sqft_inr"] > 0
+
+
+def test_sun_geometry_known_cases():
+    from app.engine.review import facade_sun_hours, sun_vector
+    # equator at equinox noon: sun is overhead
+    v = sun_vector(0.0, 80, 12.0)
+    assert v and v[2] > 0.99
+    # at 20N on the summer solstice the sun rises north of east and the north face gets sun; in winter it does not
+    h = facade_sun_hours(20.0)
+    assert h["north"]["summer"] > 0.5 and h["north"]["winter"] == 0
+    assert h["south"]["winter"] > h["south"]["summer"]
+    assert h["west"]["summer"] > 3 and h["east"]["summer"] == pytest.approx(h["west"]["summer"], abs=1.0)
+    # southern hemisphere flips it
+    assert facade_sun_hours(-20.0)["north"]["winter"] > facade_sun_hours(-20.0)["north"]["summer"]
+
+
+def test_sun_path_review_marks_assumed_latitude_and_facades():
+    m = build_model(brief())
+    r = review(m)["sun"]
+    assert r["latitude_assumed"] and "20°N is assumed" in r["note"] and len(r["items"]) == 4
+    r2 = review(m, latitude=12.9)["sun"]
+    assert not r2["latitude_assumed"] and r2["latitude"] == 12.9
+
+
+def test_future_floors_enlarge_column_and_footing():
+    from app.engine.structural import prelim
+    m = build_model(brief())
+    now = prelim(m)["sizes"]
+    later = prelim(m, planned_floors=3)
+    assert later["sizes"]["col_d"] >= now["col_d"] and later["sizes"]["footing"] > now["footing"]
+    assert "allowed for later" in later["assumptions"]["storeys"]

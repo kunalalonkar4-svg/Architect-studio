@@ -213,6 +213,99 @@ def _wall_face(model: ProjectModel, s: Space, o: Opening) -> str:
     return "north" if dy > 0 else "south"
 
 
+
+# ---------------------------------------------------------------- sun path
+FACE_NORMAL = {"north": (0.0, 1.0), "east": (1.0, 0.0), "south": (0.0, -1.0), "west": (-1.0, 0.0)}
+DAYS = {"summer": 172, "winter": 355}          # 21 June and 21 December (day of year), northern hemisphere
+
+
+def season_days(lat_deg: float) -> dict:
+    """Seasons swap days south of the equator."""
+    return DAYS if lat_deg >= 0 else {"summer": DAYS["winter"], "winter": DAYS["summer"]}
+
+
+def sun_vector(lat_deg: float, day: int, hour: float) -> tuple[float, float, float] | None:
+    """Unit vector towards the sun (east, north, up) at local solar time, or None when the sun is below the horizon."""
+    lat = math.radians(lat_deg)
+    dec = math.radians(23.44) * math.sin(math.radians(360 / 365 * (284 + day)))
+    h = math.radians(15 * (hour - 12))
+    sin_alt = math.sin(lat) * math.sin(dec) + math.cos(lat) * math.cos(dec) * math.cos(h)
+    if sin_alt <= 0.02:
+        return None
+    alt = math.asin(sin_alt)
+    cos_az = (math.sin(dec) - sin_alt * math.sin(lat)) / (math.cos(alt) * math.cos(lat) + 1e-12)
+    az = math.acos(max(-1.0, min(1.0, cos_az)))          # from north, 0 to 180
+    if h > 0:
+        az = 2 * math.pi - az                              # afternoon: west of south
+    return (math.cos(alt) * math.sin(az), math.cos(alt) * math.cos(az), sin_alt)
+
+
+def facade_sun_hours(lat_deg: float) -> dict:
+    """Hours of direct sun on a vertical wall facing each compass side, on the summer and winter solstice."""
+    out = {}
+    for face, (nx, ny) in FACE_NORMAL.items():
+        out[face] = {}
+        for season, day in season_days(lat_deg).items():
+            hrs = 0.0
+            for i in range(0, 48):
+                v = sun_vector(lat_deg, day, i / 2 + 0.25)
+                if v and v[0] * nx + v[1] * ny > 0.05:
+                    hrs += 0.5
+            out[face][season] = hrs
+    return out
+
+
+def noon_altitude(lat_deg: float, day: int) -> float:
+    v = sun_vector(lat_deg, day, 12.0)
+    return math.degrees(math.asin(v[2])) if v else 0.0
+
+
+def _window_face(model: ProjectModel, o: Opening) -> str | None:
+    """Which side of the building an external window faces (by the exterior wall that carries it)."""
+    ob = model.outer_bounds()
+    if not ob:
+        return None
+    d = {"west": abs(o.cx - ob[0]), "east": abs(ob[2] - o.cx), "south": abs(o.cy - ob[1]), "north": abs(ob[3] - o.cy)}
+    face, dist = min(d.items(), key=lambda kv: kv[1])
+    return face if dist < model.params.ext_t * 1.5 else None
+
+
+def sun_path(model: ProjectModel, latitude: float | None = None) -> dict:
+    """Direct sun on each facade, and which habitable-room windows take hot summer sun. True north is +y."""
+    assumed = latitude is None
+    lat = 20.0 if assumed else latitude
+    hrs = facade_sun_hours(lat)
+    wins: dict[str, list[tuple[Space, Opening]]] = {}
+    for o in model.openings:
+        if o.type != "window":
+            continue
+        f = _window_face(model, o)
+        s = next((x for x in model.spaces if x.key in (o.from_space, o.to_space) and x.kind in HABITABLE), None)
+        if f and s:
+            wins.setdefault(f, []).append((s, o))
+    items = []
+    for face in ("north", "east", "south", "west"):
+        w = wins.get(face, [])
+        area = sum(o.width * o.height for _, o in w) / 1e6
+        h_sum, h_win = hrs[face]["summer"], hrs[face]["winter"]
+        names = ", ".join(sorted({s.name for s, _ in w})) or "none"
+        detail = f"Direct sun about {h_sum:.1f} h in summer and {h_win:.1f} h in winter. Habitable windows: {area:.1f} m² ({names})."
+        if face in ("west", "east") and h_sum >= 4.5 and area >= 1.5:
+            items.append(_row(f"sun_{face}", "warn", f"{face.capitalize()} windows take hot summer sun", detail,
+                              sorted({s.key for s, _ in w}), "Shift window area to the north or south, or add a deep chajja, fins or a tree on that side."))
+        elif face == ("south" if lat >= 0 else "north") and w and h_win > h_sum:
+            alt = noon_altitude(lat, season_days(lat)["summer"])
+            tallest = max(o.height for _, o in w)
+            depth = tallest / math.tan(math.radians(min(alt, 89))) if alt > 5 else 0
+            items.append(_row(f"sun_{face}", "ok", f"{face.capitalize()} windows give winter sun",
+                              detail + (f" A projection of about {depth:.0f} mm over a {tallest:.0f} mm window shades it at summer noon." if depth else ""), []))
+        else:
+            items.append(_row(f"sun_{face}", "info", f"{face.capitalize()} facade", detail))
+    return dict(latitude=lat, latitude_assumed=assumed, facades=hrs, items=items,
+                note=("Latitude not entered, so 20°N is assumed. " if assumed else "") +
+                     "Solar hours are for clear days on 21 June and 21 December, ignoring neighbouring buildings and trees.")
+
+
 # ---------------------------------------------------------------- structural grid
 def column_grid(model: ProjectModel) -> dict:
     """Columns at wall corners and junctions, then span checks along each grid line."""
@@ -267,14 +360,15 @@ def column_grid(model: ProjectModel) -> dict:
 
 # ---------------------------------------------------------------- everything
 def review(model: ProjectModel, far_max: float | None = None, coverage_max_pct: float | None = None,
-           height_max_m: float | None = None, min_window_ratio: float = 0.10) -> dict:
+           height_max_m: float | None = None, min_window_ratio: float = 0.10, latitude: float | None = None) -> dict:
     rules = planning_limits(model, far_max, coverage_max_pct, height_max_m)
     v = vastu(model)
     lv = light_and_ventilation(model, min_window_ratio)
     g = column_grid(model)
-    allitems = rules["items"] + lv["items"] + g["items"]
+    sun = sun_path(model, latitude)
+    allitems = rules["items"] + lv["items"] + g["items"] + sun["items"]
     counts = dict(fail=sum(i["status"] == "fail" for i in allitems), warn=sum(i["status"] == "warn" for i in allitems),
                   ok=sum(i["status"] == "ok" for i in allitems), info=sum(i["status"] == "info" for i in allitems))
-    return dict(planning=rules, vastu=v, light_ventilation=lv, grid=g, counts=counts,
+    return dict(planning=rules, vastu=v, light_ventilation=lv, grid=g, sun=sun, counts=counts,
                 disclaimer="Advisory checks on a concept drawing. Limits come only from values you enter. Vastu is a traditional guideline. "
                            "None of this replaces approval by your local authority or the design of a licensed architect and structural engineer.")

@@ -635,7 +635,7 @@ def estimate_api(pid: str, finish: str = "standard", concrete: str = "M20", maso
 
 
 @router.get("/projects/{pid}/review")
-def review_api(pid: str, far: float | None = None, coverage: float | None = None, height: float | None = None, window_ratio: float = 0.10,
+def review_api(pid: str, far: float | None = None, coverage: float | None = None, height: float | None = None, window_ratio: float = 0.10, latitude: float | None = None,
                u: User = Depends(current_user), db: Session = Depends(get_db)):
     """Design review: planning limits (only against values you supply), Vastu, light and ventilation, column grid."""
     from ..engine.review import review
@@ -643,10 +643,10 @@ def review_api(pid: str, far: float | None = None, coverage: float | None = None
     rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
     if not rev:
         return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to review.", ["Generate the layout first"], status=404))
-    for name, v, lo, hi in (("FAR", far, 0.1, 10), ("Ground coverage", coverage, 1, 100), ("Height", height, 2, 200), ("Window ratio", window_ratio, 0.02, 0.5)):
+    for name, v, lo, hi in (("FAR", far, 0.1, 10), ("Ground coverage", coverage, 1, 100), ("Height", height, 2, 200), ("Window ratio", window_ratio, 0.02, 0.5), ("Latitude", latitude, -66, 66)):
         if v is not None and not lo <= v <= hi:
             return svc_error(ServiceError("bad_limit", f"{name} must be between {lo} and {hi}.", ["Use the value from your local rules"]))
-    return dict(revision=rev.number, **review(ProjectModel.model_validate(rev.model), far, coverage, height, window_ratio))
+    return dict(revision=rev.number, **review(ProjectModel.model_validate(rev.model), far, coverage, height, window_ratio, latitude))
 
 
 @router.get("/projects/{pid}/estimate.xlsx")
@@ -669,7 +669,7 @@ def estimate_xlsx(pid: str, rates: str = "", cont: float = 5.0, u: User = Depend
 
 
 @router.get("/projects/{pid}/structure")
-def structure_api(pid: str, sbc: float = 150.0, u: User = Depends(current_user), db: Session = Depends(get_db)):
+def structure_api(pid: str, sbc: float = 150.0, floors: int | None = None, u: User = Depends(current_user), db: Session = Depends(get_db)):
     from ..engine.structural import prelim
     p = owned_project(db, u, pid)
     rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
@@ -677,7 +677,9 @@ def structure_api(pid: str, sbc: float = 150.0, u: User = Depends(current_user),
         return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to size.", ["Generate the layout first"], status=404))
     if not 50 <= sbc <= 600:
         return svc_error(ServiceError("bad_sbc", "Safe bearing capacity must be between 50 and 600 kN/m².", ["Use the value from your soil test report"]))
-    return dict(revision=rev.number, **prelim(ProjectModel.model_validate(rev.model), sbc_kn_m2=sbc))
+    if floors is not None and not 1 <= floors <= 4:
+        return svc_error(ServiceError("bad_floors", "Planned floors must be between 1 and 4.", ["Enter how many floors you may build in total"]))
+    return dict(revision=rev.number, **prelim(ProjectModel.model_validate(rev.model), sbc_kn_m2=sbc, planned_floors=floors))
 
 
 @router.get("/projects/{pid}/jobs")
