@@ -144,3 +144,5 @@ fieldset{border-radius:var(--r);background:transparent}
 .pub-sheet{width:100%;height:auto;background:#fff;border:1px solid var(--line)}.pub-3d{height:70vh;min-height:360px;display:flex;border:1px solid var(--line);background:#fff}.pub-3d .v3{flex:1}
 .pub-list{padding-left:18px;line-height:2}.notice-box{background:#fff7e0;border:1px solid #ecd9a0;border-radius:8px;padding:8px 12px;font-size:.9rem}
 .plotshape textarea{width:100%;font-family:ui-monospace,monospace}.ps-prev{width:100%;max-width:260px;height:auto;display:block;margin:8px 0;background:#fff;border:1px solid var(--line)}
+.pk-list{list-style:none;margin:6px 0 14px;padding:0;display:grid;gap:4px}.pk-list li{display:flex;gap:8px;justify-content:space-between;align-items:flex-start;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}.pk-list li.done span{text-decoration:line-through;opacity:.6}.pk-list label{display:flex;gap:8px;align-items:flex-start}
+.pk-tag{white-space:nowrap;border-radius:10px;padding:1px 8px;background:#eef1ee;color:#445}.pk-tag.to_confirm{background:#fde8c8;color:#7a4a00}.pk-tag.assumed{background:#fff3b8;color:#665500}

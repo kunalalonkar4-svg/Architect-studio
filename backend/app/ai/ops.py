@@ -59,7 +59,7 @@ def current_revision(ctx: Ctx):
 def execute_tool(ctx: Ctx, name: str, raw: dict) -> Outcome:
     if name not in MODELS:                       # allow-list
         return err("unknown_operation", f"Operation '{name}' is not allowed.")
-    if ctx.project.status == "archived" and name not in ("explain_validation", "ask_clarification", "get_quantities", "get_review"):
+    if ctx.project.status == "archived" and name not in ("explain_validation", "ask_clarification", "get_quantities", "get_review", "get_site_pack"):
         return err("project_archived", "This project is archived and read-only.", ["Unarchive the project to continue"])
     try:
         args = MODELS[name].model_validate(raw)
@@ -432,6 +432,15 @@ def op_get_review(ctx: Ctx, a) -> Outcome:
     model = ProjectModel.model_validate(rev.model)
     r = review(model, far_max=a.far_max, coverage_max_pct=a.coverage_max_pct, height_max_m=a.height_max_m, latitude=a.latitude)
     return Outcome(dict(ok=True, revision=rev.number, review=r), [dict(type="info", message="The same checks are in the Review tab.")])
+
+
+def op_get_site_pack(ctx: Ctx, a) -> Outcome:
+    from ..engine.handover import site_pack
+    rev = current_revision(ctx)
+    if not rev:
+        return err("no_model_yet", "There is no drawing yet, so there is no site pack.")
+    pack = site_pack(ProjectModel.model_validate(rev.model), Brief.model_validate(rev.brief))
+    return Outcome(dict(ok=True, revision=rev.number, site_pack=pack), [dict(type="info", message="The same pack is in the Site pack tab, where it can be downloaded.")])
 
 
 def op_explain_validation(ctx: Ctx, a) -> Outcome:

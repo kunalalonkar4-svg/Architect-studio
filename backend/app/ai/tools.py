@@ -166,6 +166,10 @@ class GetQuantities(Strict):
     pass
 
 
+class GetSitePack(Strict):
+    pass
+
+
 class GetReview(Strict):
     far_max: Optional[float] = None            # only values the user gave, from their local rules
     coverage_max_pct: Optional[float] = None
@@ -175,7 +179,7 @@ class GetReview(Strict):
 
 MODELS = {"update_brief": UpdateBrief, "ask_clarification": AskClarification, "generate_layout": GenerateLayout,
           "propose_options": ProposeOptions, "propose_edit": ProposeEdit, "generate_views": GenerateViews,
-          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities, "get_review": GetReview,
+          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities, "get_review": GetReview, "get_site_pack": GetSitePack,
           "design_floor_plan": DesignFloorPlan}
 TEMPLATE_ONLY = {"generate_layout", "propose_options"}   # fixed-template tools, kept for the offline demo provider only
 
@@ -197,6 +201,8 @@ DESCRIPTIONS = {
     "get_review": ("Run the design checks on the active revision: planning limits (only against FAR, ground coverage and height values the user has given you from their local rules; never invent limits), "
                    "Vastu score with a reason for each mark, light and ventilation by room, sun hours on each wall (pass latitude only if the user gave their city or latitude), and the column grid with long spans. "
                    "Use these numbers when the user asks whether the plan is Vastu-compliant, well lit, within limits or structurally sensible; Vastu is traditional guidance, not a rule."),
+    "get_site_pack": ("Read the owner's site pack for the active revision: a stage-by-stage build checklist, specification notes and questions to ask the contractor and engineer, "
+                      "each item marked as read from the drawings, from the estimate, assumed, general practice, or needing confirmation by a licensed professional. Use it when the user asks for a contractor checklist, specification notes or what to ask before building."),
     "get_quantities": "Read the computed material quantities, placeholder-rate cost lines and PRELIMINARY structural sizes for the active revision. Use these numbers when the user asks about cost, BOQ, materials, beam/column/footing sizes; never invent quantities.",
 }
 

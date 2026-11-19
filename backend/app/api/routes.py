@@ -718,6 +718,22 @@ def model3d_api(pid: str, u: User = Depends(current_user), db: Session = Depends
     return model3d_payload(ProjectModel.model_validate(rev.model), rev.number)
 
 
+@router.get("/projects/{pid}/site-pack")
+def site_pack_api(pid: str, format: str = "json", u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Owner's build checklist, specification notes and questions for the contractor. A checklist, not a contract document."""
+    from ..engine.handover import site_pack, to_markdown
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is no site pack.", ["Generate the layout first"], status=404))
+    pack = site_pack(ProjectModel.model_validate(rev.model), Brief.model_validate(rev.brief))
+    if format == "md":
+        safe = "".join(ch if ch.isalnum() else "-" for ch in p.name)[:40].strip("-") or "project"
+        return Response(to_markdown(pack, p.name), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="site-pack-{safe}.md"', "X-Content-Type-Options": "nosniff"})
+    return dict(revision=rev.number, **pack)
+
+
 @router.get("/projects/{pid}/review")
 def review_api(pid: str, far: float | None = None, coverage: float | None = None, height: float | None = None, window_ratio: float = 0.10, latitude: float | None = None,
                u: User = Depends(current_user), db: Session = Depends(get_db)):

@@ -95,3 +95,28 @@ def test_samples_need_no_sign_in(client):
         assert client.get(j["plan_url"]).headers["content-type"].startswith("image/svg")
         assert client.get(f"/api/public/samples/{s['id']}/model3d").json()["walls"]
     assert client.get("/api/public/samples/nope").status_code == 404
+
+
+def test_site_pack_is_private_honest_and_downloadable(client, auth):
+    pid = make_project(client, auth, views=None)
+    r = client.get(f"/api/projects/{pid}/site-pack", headers=auth)
+    assert r.status_code == 200
+    d = r.json()
+    assert "not a contract" in d["notice"].lower() and len(d["stages"]) >= 6 and d["questions"]
+    assert any(i["source"] == "to_confirm" for st in d["stages"] for i in st["items"])
+    md = client.get(f"/api/projects/{pid}/site-pack?format=md", headers=auth)
+    assert md.status_code == 200 and "attachment" in md.headers["content-disposition"] and "- [ ]" in md.text
+    other = make_user(client, "Zed")
+    assert client.get(f"/api/projects/{pid}/site-pack", headers=other).status_code == 404
+    assert client.get(f"/api/projects/{pid}/site-pack").status_code in (401, 403)
+
+
+def test_chat_site_pack_tool(client, auth):
+    from app.ai.ops import Ctx, execute_tool
+    from app.db import SessionLocal
+    from app.models import Project, User
+    pid = make_project(client, auth, views=None)
+    with SessionLocal() as db:
+        p = db.get(Project, pid)
+        out = execute_tool(Ctx(db, p, db.get(User, p.owner_id)), "get_site_pack", {})
+        assert out.result["ok"] and out.result["site_pack"]["specification"]
