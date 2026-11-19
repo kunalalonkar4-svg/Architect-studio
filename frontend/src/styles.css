@@ -311,3 +311,5 @@ h1,h2,h3,.ptitle strong,.empty-chat h3,.pane-center h2,.empty-pane h3,.brand,.ev
 .modal header .mh-l{display:flex;align-items:center;gap:8px;min-width:0}
 .pub-l{display:flex;align-items:center;gap:12px}
 @media (max-width:520px){.btn.back{padding:.25em .55em}}
+.brandbtn{background:none;border:0;cursor:pointer;padding:0;text-align:left}.brandbtn:hover{opacity:.8}
+.homebtn{justify-content:flex-start;color:var(--mute)}

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { api, ProjectSummary } from "./api";
 import { ago, ErrorBox, Modal, Notice, Spinner, toNotice } from "./ui";
 
-interface Props { activeId: string | null; onSelect: (id: string | null) => void; refreshKey: number; onChanged: () => void; onSettings: () => void; user: string; onClose?: () => void }
+interface Props { activeId: string | null; onSelect: (id: string | null) => void; refreshKey: number; onChanged: () => void; onSettings: () => void; user: string; onClose?: () => void; onHome: () => void }
 
-export default function Sidebar({ activeId, onSelect, refreshKey, onChanged, onSettings, user, onClose }: Props) {
+export default function Sidebar({ activeId, onSelect, refreshKey, onChanged, onSettings, user, onClose, onHome }: Props) {
   const [items, setItems] = useState<ProjectSummary[] | null>(null);
   const [q, setQ] = useState(""); const [archived, setArchived] = useState(false);
   const [err, setErr] = useState<Notice | null>(null);
@@ -32,10 +32,11 @@ export default function Sidebar({ activeId, onSelect, refreshKey, onChanged, onS
   return (
     <nav className="sidebar" aria-label="Projects">
       <div className="sb-head">
-        <div className="brand"><span className="logo-mark" aria-hidden /> Drafta</div>
+        <button className="brand brandbtn" onClick={onHome} aria-label="Drafta home page" title="Home"><span className="logo-mark" aria-hidden /> Drafta</button>
         {onClose && <button className="btn ghost sm" onClick={onClose} aria-label="Close project list">✕</button>}
       </div>
       <button className="btn primary block" onClick={() => setDlg({ kind: "new" })}>+ New project</button>
+      <button className="btn ghost sm homebtn" onClick={onHome}>⌂ Home page</button>
       <input className="search" type="search" placeholder="Search projects and chats" aria-label="Search projects" value={q} onChange={e => setQ(e.target.value)} />
       <div className="seg" role="tablist" aria-label="Project filter">
         <button role="tab" aria-selected={!archived} className={!archived ? "on" : ""} onClick={() => setArchived(false)}>Active</button>

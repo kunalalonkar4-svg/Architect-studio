@@ -83,7 +83,7 @@ function Demo({ f }: { f: Feat }) {
   );
 }
 
-export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus) => void }) {
+export default function Landing({ onAuthed, authed, onOpenApp }: { onAuthed: (u: User, ai: AiStatus) => void; authed?: boolean; onOpenApp?: () => void }) {
   const [auth, setAuth] = useState(false); const [menu, setMenu] = useState(false); const [active, setActive] = useState(0);
   const refs = useRef<(HTMLElement | null)[]>([]);
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
       <Auth onAuthed={onAuthed} />
     </div>
   );
-  const go = () => { setAuth(true); window.scrollTo(0, 0); };
+  const go = () => { if (authed) { onOpenApp?.(); return; } setAuth(true); window.scrollTo(0, 0); };
   const f = FEATS[active];
   return (
     <div className="lp">
@@ -108,9 +108,9 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
         <a className="lp-brand" href="#top"><span className="logo-mark" aria-hidden /> Drafta</a>
         <nav className={menu ? "open" : ""} aria-label="Sections" onClick={() => setMenu(false)}>
           <a href="#features">Features</a><a href="#set">Drawing set</a><a href="#more">More</a><a href="#/sample">Try a sample</a><a href="#limits">Limits</a>
-          <button className="lp-signin" onClick={go}>Sign in</button>
+          <button className="lp-signin" onClick={go}>{authed ? "Open app" : "Sign in"}</button>
         </nav>
-        <button className="lp-pillbtn dark lp-navcta" onClick={go}>Get started</button>
+        <button className="lp-pillbtn dark lp-navcta" onClick={go}>{authed ? "Open app" : "Get started"}</button>
         <button className="lp-menu" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}><span /><span /></button>
       </header>
 
