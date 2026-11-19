@@ -109,11 +109,11 @@ export default function Chat({ full, reload, goTab }: Props) {
         <div className="compose-row">
           <input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,application/pdf,text/plain,.txt" onChange={e => onFile(e.target.files)} />
           <button type="button" className="btn icon" aria-label="Attach file (PNG, JPEG, PDF or text)" title="Attach file" disabled={busy || archived} onClick={() => fileRef.current?.click()}>📎</button>
-          <textarea aria-label="Message" rows={2} value={text} maxLength={6000} disabled={archived} placeholder="Describe the plot, rooms or a change… (Enter to send, Shift+Enter for a new line)"
+          <textarea aria-label="Message" rows={1} value={text} maxLength={6000} disabled={archived} placeholder="Describe your plot, rooms or a change…"
             onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (text.trim() && !busy) send(text.trim()); } }} />
           {busy
-            ? <button type="button" className="btn danger" onClick={() => abort.current?.abort()}>Stop</button>
-            : <button className="btn primary" disabled={!text.trim() || archived}>Send</button>}
+            ? <button type="button" className="btn danger send" aria-label="Stop" title="Stop" onClick={() => abort.current?.abort()}>■</button>
+            : <button className="btn primary send" aria-label="Send" title="Send" disabled={!text.trim() || archived}>↑</button>}
         </div>
       </form>
       {consent && (
