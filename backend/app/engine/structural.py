@@ -8,6 +8,35 @@ from .layout import room_metrics
 from .model import ProjectModel
 
 
+SNAP = 10
+NEAR = 300.0      # a "remove" or "move" refers to the automatic column within this distance
+
+
+def auto_columns(model: ProjectModel) -> list[tuple[int, int]]:
+    cnt: dict[tuple[int, int], int] = {}
+    for w in model.walls:
+        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
+            k = (round(x / SNAP) * SNAP, round(y / SNAP) * SNAP)
+            cnt[k] = cnt.get(k, 0) + 1
+    return [k for k, n in cnt.items() if n >= 2]
+
+
+def columns(model: ProjectModel) -> list[dict]:
+    """Automatic columns (wall corners and junctions) plus the ones the user placed, minus the ones the user removed.
+    Numbered C1.. from the north-west, the same order the structure sheet uses."""
+    ed = model.column_edits or {}
+    removes = [tuple(p) for p in ed.get("remove", [])]
+    pts = [p for p in auto_columns(model) if not any(abs(p[0] - r[0]) <= NEAR and abs(p[1] - r[1]) <= NEAR for r in removes)]
+    auto = set(pts)
+    for a in ed.get("add", []):
+        k = (round(a[0] / SNAP) * SNAP, round(a[1] / SNAP) * SNAP)
+        if k not in auto:
+            pts.append(k)
+    user = {(round(a[0] / SNAP) * SNAP, round(a[1] / SNAP) * SNAP) for a in ed.get("add", [])}
+    pts = sorted(set(pts), key=lambda k: (-k[1], k[0]))
+    return [dict(label=f"C{i}", x=x, y=y, user=(x, y) in user) for i, (x, y) in enumerate(pts, 1)]
+
+
 def _up(v: float, step: float) -> float:
     return math.ceil(v / step) * step
 

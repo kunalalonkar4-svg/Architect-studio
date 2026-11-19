@@ -92,7 +92,9 @@ def effective_setbacks(brief: Brief, use_assumptions: bool):
 
 
 def attach_plot_shape(model, brief: Brief, use_assumptions: bool):
-    """Record the real boundary on the model so the site plan can draw it."""
+    """Record the real boundary and any user-placed columns on the model."""
+    if brief.column_adds or brief.column_removes:
+        model.column_edits = dict(add=[list(p) for p in brief.column_adds], remove=[list(p) for p in brief.column_removes])
     if brief.plot_polygon_mm and brief.road_side and model.plot is not None:
         f, *_ = _polygon_fit(brief, use_assumptions)
         model.plot.update(polygon=f["polygon"], inset=f["inset"], fit_rect=f["rect"], user_setbacks=f["user_setbacks"], plot_area=f["area_plot"])

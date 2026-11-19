@@ -981,17 +981,14 @@ def structure_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
             b.rect(w.x1 - t, min(w.y1, w.y2) - t, w.x1 + t, max(w.y1, w.y2) + t, "A-SECT-BEYOND")
     for w in model.walls:                                         # plinth / roof beams run on every wall line
         b.line(w.x1, w.y1, w.x2, w.y2, "S-BEAM", "center")
-    cnt: dict[tuple[int, int], int] = {}
-    for w in model.walls:
-        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
-            k = (round(x / 10) * 10, round(y / 10) * 10)
-            cnt[k] = cnt.get(k, 0) + 1
-    cols = sorted([k for k, n in cnt.items() if n >= 2], key=lambda k: (-k[1], k[0]))
-    for i, (x, y) in enumerate(cols, 1):
+    from .structural import columns as _columns
+    cols = _columns(model)
+    for c in cols:
+        x, y, i = c["x"], c["y"], int(c["label"][1:])
         fs = sz["footing"] / 2
         b.rect(x - fs, y - fs, x + fs, y + fs, "S-FOOT", None, "dash")
         b.rect(x - sz["col_b"] / 2, y - sz["col_d"] / 2, x + sz["col_b"] / 2, y + sz["col_d"] / 2, "S-COL", "mid")
-        b.text(x + sz["col_b"] / 2 + b.p(1), y + sz["col_d"] / 2 + b.p(1), f"C{i}", 1.8, "A-ANNO-TEXT", "l", "b", bold=True)
+        b.text(x + sz["col_b"] / 2 + b.p(1), y + sz["col_d"] / 2 + b.p(1), c["label"] + ("*" if c["user"] else ""), 1.8, "A-ANNO-TEXT", "l", "b", bold=True)
     b.dim_h(ob[0], ob[2], ob[3], ob[3] + b.p(10), f"{ob[2]-ob[0]:.0f}")
     b.dim_v(ob[1], ob[3], ob[0], ob[0] - b.p(10), f"{ob[3]-ob[1]:.0f}")
     b.north_arrow(ob[2] + b.p(24), ob[3] + b.p(4))
@@ -1002,10 +999,11 @@ def structure_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
              ("Rule-of-thumb sizes for early planning. Not a structural design.", 2.0, False),
              ("A licensed structural engineer must design and check all members", 2.0, False),
              ("against current IS codes using a soil investigation report.", 2.0, False), ("", 2.0, False),
-             (f"COLUMNS C1-C{len(cols)}: {sz['col_b']:.0f} x {sz['col_d']:.0f} mm RCC (M20 / Fe500), at wall corners and junctions", 2.0, False),
+             (f"COLUMNS C1-C{len(cols)}: {sz['col_b']:.0f} x {sz['col_d']:.0f} mm RCC (M20 / Fe500), at wall corners and junctions, plus any you placed", 2.0, False),
              (f"FOOTINGS: {sz['footing']:.0f} x {sz['footing']:.0f} x {sz['footing_depth']:.0f} mm under each column (assumed SBC 150 kN/m2)", 2.0, False),
              (f"ROOF BEAMS: {sz['beam_b']:.0f} x {sz['beam_d']:.0f} mm on wall lines;  PLINTH BEAM 230 x 300 mm", 2.0, False),
              (f"ROOF SLAB: {sz['slab']:.0f} mm thick (model {model.levels[0].slab:.0f} mm)", 2.0, False), ("", 2.0, False),
+             *([(f"* = column placed or moved at the owner's request ({sum(1 for c in cols if c['user'])}); position needs the engineer's confirmation", 1.8, True)] if any(c["user"] for c in cols) else []),
              ("Beam and column positions follow the architectural walls (dash-dot lines);", 1.8, False),
              ("column grid is indicative and not optimised. Footings may overlap and need design.", 1.8, False)]
     for txt, h, bold in lines:

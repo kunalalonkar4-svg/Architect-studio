@@ -309,11 +309,8 @@ def sun_path(model: ProjectModel, latitude: float | None = None) -> dict:
 # ---------------------------------------------------------------- structural grid
 def column_grid(model: ProjectModel) -> dict:
     """Columns at wall corners and junctions, then span checks along each grid line."""
-    pts: dict[tuple[int, int], set[str]] = {}
-    for w in model.walls:
-        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
-            pts.setdefault((round(x / 10) * 10, round(y / 10) * 10), set()).add(w.id)
-    cols = [dict(x=x, y=y) for (x, y) in sorted(pts)]
+    from .structural import columns as _columns
+    cols = [dict(x=c["x"], y=c["y"]) for c in sorted(_columns(model), key=lambda c: (c["x"], c["y"]))]
     items = []
     by_y: dict[int, list[int]] = {}
     by_x: dict[int, list[int]] = {}

@@ -73,8 +73,19 @@ class ProposeOptions(Strict):
     use_assumptions: bool = False
 
 
+class Point(Strict):
+    x: Length      # east of the house's south-west outer corner
+    y: Length      # north of that corner
+
+
+class ColumnMove(Strict):
+    label: str     # e.g. "C5", as numbered on the structure sheet
+    dx: Optional[Length] = None   # east is positive
+    dy: Optional[Length] = None   # north is positive
+
+
 class EditItem(Strict):
-    op: Literal["move_stair", "resize_space", "move_wall", "set_opening", "set_level_height", "set_brief"]
+    op: Literal["move_stair", "resize_space", "move_wall", "set_opening", "set_level_height", "set_brief", "set_columns"]
     position: Optional[Literal["front", "rear"]] = None
     space: Optional[str] = None
     width: Optional[Length] = None
@@ -90,6 +101,9 @@ class EditItem(Strict):
     floors: Optional[int] = None
     kitchen_type: Optional[Literal["open", "closed"]] = None
     parking: Optional[bool] = None
+    add_columns: Optional[list["Point"]] = None
+    remove_columns: Optional[list[str]] = None
+    move_columns: Optional[list["ColumnMove"]] = None
 
 
 class ProposeEdit(Strict):
@@ -170,7 +184,7 @@ DESCRIPTIONS = {
     "ask_clarification": "Ask only the essential questions that materially change the design (e.g. which side is the road, required open spaces). Keep them short.",
     "generate_layout": "Generate the first dimensioned ground-floor layout and drawing preview from the brief. use_assumptions=true only when the user agreed to proceed with clearly labelled concept assumptions.",
     "propose_options": "Offer 2-3 alternative layouts (different stair positions). The server computes exact dimensions for each; the user then chooses one.",
-    "propose_edit": "Propose changes to the existing design (move stair, resize a room, move a partition wall, change a door/window size, floor height, bedrooms). The server computes all coordinates, shows the changes and affected drawings, and commits only after the user confirms. List rooms the user said to keep unchanged in preserve.",
+    "propose_edit": "Propose changes to the existing design (move stair, add/remove/move columns with op set_columns using add_columns (x east, y north from the house's south-west outer corner), remove_columns (labels like C3) or move_columns (label plus dx east, dy north); columns are numbered C1.. on the structure sheet, resize a room, move a partition wall, change a door/window size, floor height, bedrooms). The server computes all coordinates, shows the changes and affected drawings, and commits only after the user confirms. List rooms the user said to keep unchanged in preserve.",
     "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index, structure = preliminary column/footing/beam layout, mep = concept electrical points and plumbing/septic layout). Generate only what the user asked for.",
     "request_export": "Start an export (pdf = vector sheets at exact paper size, dxf = layered model-space CAD, png). Do not say a file is ready until the app confirms.",
     "explain_validation": "Read the current validation issues of the active revision so you can explain them to the user in simple language.",

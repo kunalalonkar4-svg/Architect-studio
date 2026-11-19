@@ -46,6 +46,45 @@ def _local_dims(model: ProjectModel, key: str):
     return s.h, s.w
 
 
+def _apply_columns(brief: Brief, model: ProjectModel, op: dict) -> None:
+    """Add, remove or move columns. Positions are mm east/north of the house's south-west outer corner; columns are named C1.. as on the structure sheet."""
+    from .structural import NEAR, columns
+    ob = model.outer_bounds()
+    if not ob:
+        raise EditError("no_model", "There is no drawing to place columns on yet.", [])
+    cur = {c["label"].upper(): c for c in columns(model)}
+    adds = [list(p) for p in brief.column_adds]; removes = [list(p) for p in brief.column_removes]
+
+    def drop(c):
+        near = [a for a in adds if abs(a[0] - c["x"]) <= NEAR and abs(a[1] - c["y"]) <= NEAR]
+        if near:
+            for a in near:
+                adds.remove(a)
+        else:
+            removes.append([c["x"], c["y"]])
+
+    def place(x, y):
+        wx, wy = ob[0] + float(x), ob[1] + float(y)
+        if not (ob[0] - 1 <= wx <= ob[2] + 1 and ob[1] - 1 <= wy <= ob[3] + 1):
+            raise EditError("column_outside", f"A column at {x / 1000:.2f} m east, {y / 1000:.2f} m north is outside the house.",
+                            [f"Use x from 0 to {(ob[2] - ob[0]) / 1000:.2f} m and y from 0 to {(ob[3] - ob[1]) / 1000:.2f} m"])
+        adds.append([round(wx / 10) * 10, round(wy / 10) * 10])
+
+    for lab in op.get("remove", []):
+        c = cur.get(str(lab).upper())
+        if not c:
+            raise EditError("no_such_column", f"There is no column {lab}.", [f"Columns are C1 to C{len(cur)}"])
+        drop(c)
+    for m in op.get("move", []):
+        c = cur.get(str(m["label"]).upper())
+        if not c:
+            raise EditError("no_such_column", f"There is no column {m['label']}.", [f"Columns are C1 to C{len(cur)}"])
+        drop(c); place(c["x"] - ob[0] + float(m.get("dx_mm", 0)), c["y"] - ob[1] + float(m.get("dy_mm", 0)))
+    for p in op.get("add", []):
+        place(p[0], p[1])
+    brief.column_adds, brief.column_removes = adds, removes
+
+
 def apply_edits(brief: Brief, model: ProjectModel, ops: list[dict], use_assumptions: bool = True,
                 preserve: list[str] | None = None) -> tuple[Brief, ProjectModel, list[str]]:
     brief = brief.model_copy(deep=True)
@@ -61,7 +100,7 @@ def apply_edits(brief: Brief, model: ProjectModel, ops: list[dict], use_assumpti
         if kind == "replace_plan":
             plan_obj = PlanSpec.model_validate(op["plan"]); overrides = {}
             continue
-        if plan_obj is not None and kind not in ("set_opening", "set_level_height", "set_brief"):
+        if plan_obj is not None and kind not in ("set_opening", "set_level_height", "set_brief", "set_columns"):
             raise EditError("plan_model", "This house was designed room by room, so that quick edit is not available. Describe the change and I will redesign the plan.",
                             ["Ask for the change in words (e.g. make bedroom 2 bigger, move the stair)"])
         if kind == "move_stair":
@@ -109,6 +148,8 @@ def apply_edits(brief: Brief, model: ProjectModel, ops: list[dict], use_assumpti
                     setattr(brief, k, v)
             if "stair_position" in f:
                 params.stair_position = f["stair_position"]
+        elif kind == "set_columns":
+            _apply_columns(brief, model, op)
         else:
             raise EditError("unknown_op", f"Unsupported edit '{kind}'.")
     try:
@@ -246,4 +287,11 @@ def diff_models(old: ProjectModel | None, new: ProjectModel) -> list[dict]:
             out.append(dict(kind="stair", text=f"Stair: {a.risers} risers @ {a.riser_mm} → {b.risers} @ {b.riser_mm} mm."))
     if old.levels[0].height != new.levels[0].height:
         out.append(dict(kind="level", text=f"Floor height {f(old.levels[0].height)} → {f(new.levels[0].height)} mm."))
+    from .structural import columns
+    oc = {(c["x"], c["y"]) for c in columns(old)}; nc = {(c["x"], c["y"]) for c in columns(new)}
+    ob = new.outer_bounds() or (0, 0, 0, 0)
+    for x, y in sorted(nc - oc):
+        out.append(dict(kind="column_added", text=f"Column added at {(x - ob[0]) / 1000:.2f} m east, {(y - ob[1]) / 1000:.2f} m north of the house's south-west corner (needs a structural engineer's check)."))
+    for x, y in sorted(oc - nc):
+        out.append(dict(kind="column_removed", text=f"Column removed at {(x - ob[0]) / 1000:.2f} m east, {(y - ob[1]) / 1000:.2f} m north of the house's south-west corner."))
     return out

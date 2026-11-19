@@ -343,6 +343,9 @@ def _edit_to_ops(items) -> list[dict]:
             ops.append(dict(op="set_opening", mark=e.mark or "", width_mm=mm(e.width), height_mm=mm(e.height), sill_mm=mm(e.sill), shift_mm=mm(e.shift), hinge=e.hinge))
         elif e.op == "set_level_height":
             ops.append(dict(op="set_level_height", height_mm=mm(e.height)))
+        elif e.op == "set_columns":
+            ops.append(dict(op="set_columns", add=[[mm(p.x), mm(p.y)] for p in (e.add_columns or [])], remove=list(e.remove_columns or []),
+                            move=[dict(label=m.label, dx_mm=mm(m.dx) if m.dx else 0.0, dy_mm=mm(m.dy) if m.dy else 0.0) for m in (e.move_columns or [])]))
         elif e.op == "set_brief":
             f = {}
             if e.bedrooms is not None: f["bedrooms"] = e.bedrooms

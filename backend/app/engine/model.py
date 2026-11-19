@@ -44,6 +44,8 @@ class Brief(BaseModel):
     assumptions: list[Assumption] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)  # user-supplied planning constraints, verbatim
     plot_polygon_mm: Optional[list[list[float]]] = None   # irregular convex plot corners (x east, y north); width/depth come from these
+    column_adds: list[list[float]] = Field(default_factory=list)      # columns the user placed (plot coordinates, mm)
+    column_removes: list[list[float]] = Field(default_factory=list)   # automatic columns the user removed (plot coordinates, mm)
     dims_assumed_orientation: bool = False   # "30 by 50" -> first number taken along the road
 
     def missing(self) -> list[dict]:
@@ -197,6 +199,7 @@ class ProjectModel(BaseModel):
     roof_approved: bool = False
     assumptions: list[Assumption] = Field(default_factory=list)
     review_status: str = "concept_unreviewed"
+    column_edits: dict = Field(default_factory=dict)   # {"add": [[x,y]], "remove": [[x,y]]} copied from the brief
     plan: Optional[dict] = None     # Claude-designed room plan (PlanSpec) this model was built from
 
     def level(self, lid="GF") -> Level:
