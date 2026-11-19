@@ -3,15 +3,16 @@ import { api, Full } from "./api";
 import BriefPanel from "./BriefPanel";
 import Chat from "./Chat";
 import EstimatePanel from "./EstimatePanel";
+import ReviewPanel from "./ReviewPanel";
 import ExportPanel from "./ExportPanel";
 import Revisions from "./Revisions";
 import Viewer from "./Viewer";
 import { ErrorBox, Notice, Spinner, toNotice, useInterval } from "./ui";
 
-export type Tab = "chat" | "drawing" | "brief" | "estimate" | "revisions" | "export";
+export type Tab = "chat" | "drawing" | "brief" | "estimate" | "review" | "revisions" | "export";
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "chat", label: "Chat", icon: "" }, { id: "drawing", label: "Drawing", icon: "" }, { id: "brief", label: "Brief", icon: "" },
-  { id: "estimate", label: "Estimate", icon: "" }, { id: "revisions", label: "History", icon: "" }, { id: "export", label: "Export", icon: "" },
+  { id: "review", label: "Review", icon: "" }, { id: "estimate", label: "Estimate", icon: "" }, { id: "revisions", label: "History", icon: "" }, { id: "export", label: "Export", icon: "" },
 ];
 
 export function useWide() {
@@ -54,6 +55,7 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
     <div className="rightpane" role="tabpanel" id="pane" aria-label={rt}>
       {rt === "drawing" && <Viewer full={full} reload={reload} />}
       {rt === "brief" && <BriefPanel full={full} reload={reload} goTab={goTab} />}
+      {rt === "review" && <ReviewPanel full={full} />}
       {rt === "estimate" && <EstimatePanel full={full} />}
       {rt === "revisions" && <Revisions full={full} reload={reload} goTab={goTab} />}
       {rt === "export" && <ExportPanel full={full} reload={reload} />}

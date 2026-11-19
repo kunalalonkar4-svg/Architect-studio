@@ -125,3 +125,10 @@ fieldset{border-radius:var(--r);background:transparent}
 .tag{border-radius:3px;text-transform:none;letter-spacing:0}
 .auth{background:var(--paper)}.auth-card{border-radius:6px;border:1.5px solid var(--ink);box-shadow:6px 6px 0 var(--line)}
 @media (max-width:979px){.canvas{min-height:58vh}.wshead{padding:8px 12px}.ptitle small{font-size:.76rem}}
+.panel h4{margin:1.2em 0 .3em;font-size:.95rem}
+.rv-list{list-style:none;padding:0;margin:.4em 0;display:grid;gap:6px}
+.rv{display:grid;grid-template-columns:28px 1fr;gap:8px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;align-items:start}
+.rv small{display:block}.rv-fix{color:var(--navy2)}
+.rv-mark{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.85rem;border:2px solid currentColor}
+.rv.ok .rv-mark{color:var(--ok)}.rv.warn .rv-mark{color:var(--warn)}.rv.fail .rv-mark{color:var(--err)}.rv.info .rv-mark{color:var(--mute)}
+.rv.fail{border-color:#e6b8b4;background:#fdf1f0}.rv.warn{border-color:#ecd48a;background:#fffbee}

@@ -25,7 +25,19 @@ DEFAULT_RATES = {
 }
 
 
-def estimate(model: ProjectModel) -> dict:
+# Selectable options. Every multiplier is a placeholder to start from, not a market price: the user still edits each rate.
+FINISH = {   # finish level -> per-item rate multiplier
+    "basic": dict(flooring=0.75, paint=0.8, doors=0.8, windows=0.8, sanitary=0.7),
+    "standard": {},
+    "premium": dict(flooring=1.8, paint=1.5, doors=1.6, windows=1.6, sanitary=2.0, electrical=1.3),
+}
+CONCRETE = {"M20": {}, "M25": dict(slab=1.04, foundation=1.04), "M30": dict(slab=1.08, foundation=1.08)}
+MASONRY = {"brick": {}, "aac": dict(masonry=1.05, plaster=0.9), "flyash": dict(masonry=0.92)}
+REGION = {"standard": 1.0, "metro": 1.15, "small_town": 0.9}   # overall rate index, not a city price list
+SQFT_PER_M2 = 10.7639
+
+
+def estimate(model: ProjectModel, finish: str = "standard", concrete: str = "M20", masonry: str = "brick", region: str = "standard") -> dict:
     lv = model.levels[0]
     h_wall = max(lv.height - lv.slab, 0) / 1000.0            # m, masonry height under slab
     ob = model.outer_bounds()
@@ -78,5 +90,18 @@ def estimate(model: ProjectModel) -> dict:
         dict(id="plumbing", name="Plumbing (allowance)", unit="m²", qty=round(built_up, 2), basis="Allowance per m² built-up (all floors), replace with a real plumbing estimate"),
         dict(id="sanitary", name=f"Sanitary fixtures ({toilets} toilet(s))", unit="no.", qty=float(toilets), basis="Allowance per toilet"),
     ]
-    return dict(currency="INR", built_up_m2=round(built_up, 2), floors=nlev, carpet_m2=round(floor, 2), items=items, rates=DEFAULT_RATES,
+    finish = finish if finish in FINISH else "standard"
+    concrete = concrete if concrete in CONCRETE else "M20"
+    masonry = masonry if masonry in MASONRY else "brick"
+    region = region if region in REGION else "standard"
+    rates = {}
+    for k, v in DEFAULT_RATES.items():
+        m = REGION[region] * FINISH[finish].get(k, 1.0) * CONCRETE[concrete].get(k, 1.0) * MASONRY[masonry].get(k, 1.0)
+        rates[k] = round(v * m, 2)
+    subtotal = sum(i["qty"] * rates[i["id"]] for i in items)
+    sqft = built_up * SQFT_PER_M2
+    options = dict(selected=dict(finish=finish, concrete=concrete, masonry=masonry, region=region),
+                   choices=dict(finish=list(FINISH), concrete=list(CONCRETE), masonry=list(MASONRY), region=list(REGION)))
+    return dict(currency="INR", built_up_m2=round(built_up, 2), built_up_sqft=round(sqft, 0), floors=nlev, carpet_m2=round(floor, 2), items=items, rates=rates,
+                options=options, subtotal_inr=round(subtotal), cost_per_sqft_inr=round(subtotal / sqft) if sqft else 0,
                 disclaimer="Concept-level quantities from the drawing model. Rates are editable placeholders, not market prices or a quotation. Foundation, steel, electrical and plumbing lines are rule-of-thumb allowances, not designed quantities. Excludes site development, boundary wall, lift, furniture, premium finishes, taxes, labour contingencies and site conditions.")

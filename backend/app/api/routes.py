@@ -624,13 +624,29 @@ def create_export(pid: str, b: ExportIn, u: User = Depends(current_user), db: Se
 
 
 @router.get("/projects/{pid}/estimate")
-def estimate_api(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+def estimate_api(pid: str, finish: str = "standard", concrete: str = "M20", masonry: str = "brick", region: str = "standard",
+                 u: User = Depends(current_user), db: Session = Depends(get_db)):
     from ..engine.estimate import estimate
     p = owned_project(db, u, pid)
     rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
     if not rev:
         return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to estimate.", ["Generate the layout first"], status=404))
-    return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model)))
+    return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model), finish, concrete, masonry, region))
+
+
+@router.get("/projects/{pid}/review")
+def review_api(pid: str, far: float | None = None, coverage: float | None = None, height: float | None = None, window_ratio: float = 0.10,
+               u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Design review: planning limits (only against values you supply), Vastu, light and ventilation, column grid."""
+    from ..engine.review import review
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to review.", ["Generate the layout first"], status=404))
+    for name, v, lo, hi in (("FAR", far, 0.1, 10), ("Ground coverage", coverage, 1, 100), ("Height", height, 2, 200), ("Window ratio", window_ratio, 0.02, 0.5)):
+        if v is not None and not lo <= v <= hi:
+            return svc_error(ServiceError("bad_limit", f"{name} must be between {lo} and {hi}.", ["Use the value from your local rules"]))
+    return dict(revision=rev.number, **review(ProjectModel.model_validate(rev.model), far, coverage, height, window_ratio))
 
 
 @router.get("/projects/{pid}/estimate.xlsx")
