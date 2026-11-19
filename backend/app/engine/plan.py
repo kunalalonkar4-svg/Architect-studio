@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .layout import (ImpossibleLayout, effective_setbacks, local_to_world, refresh_walls, stair_flight)
+from .layout import (ImpossibleLayout, attach_plot_shape, effective_setbacks, local_to_world, refresh_walls, stair_flight)
 from .model import Assumption, Brief, LayoutParams, Level, Opening, ProjectModel, Space, Stair
 
 KINDS = ["living", "dining", "kitchen", "bedroom", "toilet", "store", "study", "entry", "stair", "parking", "sitout",
@@ -239,6 +239,7 @@ def build_model_from_plan(brief: Brief, plan: PlanSpec, params: LayoutParams | N
                                    local_origin=[bx0, by0], bw=BW, bd=BD),
                          levels=levels, spaces=spaces, params=p, opening_overrides=dict(overrides or {}),
                          assumptions=list(brief.assumptions) + asm, roof_approved=roof_approved, plan=plan.model_dump())
+    attach_plot_shape(model, brief, use_assumptions)
     # ---- openings
     ops: list[dict] = []
     order = {r.key: i for i, r in enumerate(rooms)}

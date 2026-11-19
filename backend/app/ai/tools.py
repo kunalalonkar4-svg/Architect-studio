@@ -10,7 +10,7 @@ LENGTH = {"type": "object", "description": "A length with its unit exactly as th
           "properties": {"value": {"type": "number"}, "unit": {"type": "string", "enum": ["mm", "cm", "m", "ft", "in", "unspecified"]}},
           "required": ["value", "unit"], "additionalProperties": False}
 SIDE = {"type": "string", "enum": ["north", "east", "south", "west"]}
-VIEW_KINDS = ["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
+VIEW_KINDS = ["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure", "mep"]
 FACINGS = ["front", "rear", "left", "right", "north", "east", "south", "west"]
 
 
@@ -39,7 +39,7 @@ class UpdateBrief(Strict):
     stair: Optional[bool] = None
     stair_position: Optional[Literal["front", "rear"]] = None
     future_levels: Optional[list[str]] = None
-    requested_views: Optional[list[Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]]] = None
+    requested_views: Optional[list[Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure", "mep"]]] = None
     constraints: Optional[list[str]] = None
     notes: Optional[str] = None
     language: Optional[Literal["en", "hi", "hinglish"]] = None
@@ -73,8 +73,19 @@ class ProposeOptions(Strict):
     use_assumptions: bool = False
 
 
+class Point(Strict):
+    x: Length      # east of the house's south-west outer corner
+    y: Length      # north of that corner
+
+
+class ColumnMove(Strict):
+    label: str     # e.g. "C5", as numbered on the structure sheet
+    dx: Optional[Length] = None   # east is positive
+    dy: Optional[Length] = None   # north is positive
+
+
 class EditItem(Strict):
-    op: Literal["move_stair", "resize_space", "move_wall", "set_opening", "set_level_height", "set_brief"]
+    op: Literal["move_stair", "resize_space", "move_wall", "set_opening", "set_level_height", "set_brief", "set_columns"]
     position: Optional[Literal["front", "rear"]] = None
     space: Optional[str] = None
     width: Optional[Length] = None
@@ -90,6 +101,9 @@ class EditItem(Strict):
     floors: Optional[int] = None
     kitchen_type: Optional[Literal["open", "closed"]] = None
     parking: Optional[bool] = None
+    add_columns: Optional[list["Point"]] = None
+    remove_columns: Optional[list[str]] = None
+    move_columns: Optional[list["ColumnMove"]] = None
 
 
 class ProposeEdit(Strict):
@@ -126,7 +140,7 @@ class DesignFloorPlan(Strict):
 
 
 class ViewSpec(Strict):
-    kind: Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure"]
+    kind: Literal["site", "plan", "roof", "elevations", "section", "schedules", "index", "structure", "mep"]
     paper: Optional[Literal["A4", "A3", "A2", "A1", "A0"]] = None
     scale: Optional[Literal[20, 25, 50, 100, 200, 500]] = None
     facings: Optional[list[Literal["front", "rear", "left", "right", "north", "east", "south", "west"]]] = None
@@ -152,9 +166,20 @@ class GetQuantities(Strict):
     pass
 
 
+class GetSitePack(Strict):
+    pass
+
+
+class GetReview(Strict):
+    far_max: Optional[float] = None            # only values the user gave, from their local rules
+    coverage_max_pct: Optional[float] = None
+    height_max_m: Optional[float] = None
+    latitude: Optional[float] = None
+
+
 MODELS = {"update_brief": UpdateBrief, "ask_clarification": AskClarification, "generate_layout": GenerateLayout,
           "propose_options": ProposeOptions, "propose_edit": ProposeEdit, "generate_views": GenerateViews,
-          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities,
+          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities, "get_review": GetReview, "get_site_pack": GetSitePack,
           "design_floor_plan": DesignFloorPlan}
 TEMPLATE_ONLY = {"generate_layout", "propose_options"}   # fixed-template tools, kept for the offline demo provider only
 
@@ -163,8 +188,8 @@ DESCRIPTIONS = {
     "ask_clarification": "Ask only the essential questions that materially change the design (e.g. which side is the road, required open spaces). Keep them short.",
     "generate_layout": "Generate the first dimensioned ground-floor layout and drawing preview from the brief. use_assumptions=true only when the user agreed to proceed with clearly labelled concept assumptions.",
     "propose_options": "Offer 2-3 alternative layouts (different stair positions). The server computes exact dimensions for each; the user then chooses one.",
-    "propose_edit": "Propose changes to the existing design (move stair, resize a room, move a partition wall, change a door/window size, floor height, bedrooms). The server computes all coordinates, shows the changes and affected drawings, and commits only after the user confirms. List rooms the user said to keep unchanged in preserve.",
-    "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index, structure = preliminary column/footing/beam layout). Generate only what the user asked for.",
+    "propose_edit": "Propose changes to the existing design (move stair, add/remove/move columns with op set_columns using add_columns (x east, y north from the house's south-west outer corner), remove_columns (labels like C3) or move_columns (label plus dx east, dy north); columns are numbered C1.. on the structure sheet, resize a room, move a partition wall, change a door/window size, floor height, bedrooms). The server computes all coordinates, shows the changes and affected drawings, and commits only after the user confirms. List rooms the user said to keep unchanged in preserve.",
+    "generate_views": "Add or update requested drawing sheets (site, plan, roof, elevations, section, schedules, index, structure = preliminary column/footing/beam layout, mep = concept electrical points and plumbing/septic layout). Generate only what the user asked for.",
     "request_export": "Start an export (pdf = vector sheets at exact paper size, dxf = layered model-space CAD, png). Do not say a file is ready until the app confirms.",
     "explain_validation": "Read the current validation issues of the active revision so you can explain them to the user in simple language.",
     "design_floor_plan": ("Design the house yourself, as an experienced architect: choose every room, its rectangle and how rooms connect, for ANY plot size, 1-5+ bedrooms, one or two floors. "
@@ -173,6 +198,11 @@ DESCRIPTIONS = {
                           "every room must be reachable from entry_room via 'door' (needs >= 1100 mm shared wall) or 'open' (no wall, >= 600 mm) connections; bedrooms, living, kitchen and study need an outside wall for a window; "
                           "two floors need a room of kind 'stair' with the identical rectangle on both floors (>= 2300 x 3000 mm for the dog-leg stair). Name first-floor keys with an f_ prefix. "
                           "WORKFLOW: call with final=false first; the server returns a drawing image of your plan with room sizes and a review checklist, but saves nothing. Review it critically, fix and re-preview as needed, then call with final=true and the identical plan to save it (server refuses final=true for a plan you have not previewed). If a design already exists, final=true creates a proposal the user confirms. If the server returns problems, fix them and call again."),
+    "get_review": ("Run the design checks on the active revision: planning limits (only against FAR, ground coverage and height values the user has given you from their local rules; never invent limits), "
+                   "Vastu score with a reason for each mark, light and ventilation by room, sun hours on each wall (pass latitude only if the user gave their city or latitude), and the column grid with long spans. "
+                   "Use these numbers when the user asks whether the plan is Vastu-compliant, well lit, within limits or structurally sensible; Vastu is traditional guidance, not a rule."),
+    "get_site_pack": ("Read the owner's site pack for the active revision: a stage-by-stage build checklist, specification notes and questions to ask the contractor and engineer, "
+                      "each item marked as read from the drawings, from the estimate, assumed, general practice, or needing confirmation by a licensed professional. Use it when the user asks for a contractor checklist, specification notes or what to ask before building."),
     "get_quantities": "Read the computed material quantities, placeholder-rate cost lines and PRELIMINARY structural sizes for the active revision. Use these numbers when the user asks about cost, BOQ, materials, beam/column/footing sizes; never invent quantities.",
 }
 

@@ -8,13 +8,43 @@ from .layout import room_metrics
 from .model import ProjectModel
 
 
+SNAP = 10
+NEAR = 300.0      # a "remove" or "move" refers to the automatic column within this distance
+
+
+def auto_columns(model: ProjectModel) -> list[tuple[int, int]]:
+    cnt: dict[tuple[int, int], int] = {}
+    for w in model.walls:
+        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
+            k = (round(x / SNAP) * SNAP, round(y / SNAP) * SNAP)
+            cnt[k] = cnt.get(k, 0) + 1
+    return [k for k, n in cnt.items() if n >= 2]
+
+
+def columns(model: ProjectModel) -> list[dict]:
+    """Automatic columns (wall corners and junctions) plus the ones the user placed, minus the ones the user removed.
+    Numbered C1.. from the north-west, the same order the structure sheet uses."""
+    ed = model.column_edits or {}
+    removes = [tuple(p) for p in ed.get("remove", [])]
+    pts = [p for p in auto_columns(model) if not any(abs(p[0] - r[0]) <= NEAR and abs(p[1] - r[1]) <= NEAR for r in removes)]
+    auto = set(pts)
+    for a in ed.get("add", []):
+        k = (round(a[0] / SNAP) * SNAP, round(a[1] / SNAP) * SNAP)
+        if k not in auto:
+            pts.append(k)
+    user = {(round(a[0] / SNAP) * SNAP, round(a[1] / SNAP) * SNAP) for a in ed.get("add", [])}
+    pts = sorted(set(pts), key=lambda k: (-k[1], k[0]))
+    return [dict(label=f"C{i}", x=x, y=y, user=(x, y) in user) for i, (x, y) in enumerate(pts, 1)]
+
+
 def _up(v: float, step: float) -> float:
     return math.ceil(v / step) * step
 
 
-def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy: float = 500.0, bay_m2: float = 16.0) -> dict:
+def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy: float = 500.0, bay_m2: float = 16.0, planned_floors: int | None = None) -> dict:
     lv = model.levels[0]
-    nlev = len(model.levels)
+    built = len(model.levels)
+    nlev = max(built, planned_floors or built)      # columns and footings are sized for the floors you plan to add later
     rooms = [(s, room_metrics(model, s)) for s in model.spaces if not s.open_boundary]
     spans = [(s.name, sorted([m["clear_w"], m["clear_d"]])) for s, m in rooms]
     short = max((sp[1][0] for sp in spans), default=0.0)            # largest short-span of any slab panel (mm)
@@ -38,7 +68,7 @@ def prelim(model: ProjectModel, sbc_kn_m2: float = 150.0, fck: float = 20.0, fy:
     # Steel indicators (rule-of-thumb kg per m3 of concrete)
     return dict(
         sizes=dict(slab=slab_req, beam_d=beam_d, beam_b=230.0, col_b=col_b, col_d=col_d, footing=f_side, footing_depth=f_depth),
-        assumptions=dict(sbc_kn_m2=sbc_kn_m2, concrete=f"M{fck:.0f}", steel=f"Fe{fy:.0f}", tributary_bay_m2=bay_m2, load_kn_m2=w_service, storeys="1 (ground floor + roof slab)" if nlev == 1 else f"{nlev} (ground + first floor + roof slab)"),
+        assumptions=dict(sbc_kn_m2=sbc_kn_m2, concrete=f"M{fck:.0f}", steel=f"Fe{fy:.0f}", tributary_bay_m2=bay_m2, load_kn_m2=w_service, storeys=("1 (ground floor + roof slab)" if nlev == 1 else f"{nlev} (ground + first floor + roof slab)" if nlev == 2 else f"{nlev} floors + roof slab") + (f", {built} built now, {nlev - built} allowed for later" if nlev > built else "")),
         items=[
             dict(id="slab", name="Roof slab thickness", value=f"{slab_req:.0f} mm", status="ok" if slab_ok else "check",
                  basis=f"Largest short panel span {short:.0f} mm ÷ 30 + 25 mm cover, min 125 mm. Model has {lv.slab:.0f} mm.",

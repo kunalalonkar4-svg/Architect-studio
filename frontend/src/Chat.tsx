@@ -11,6 +11,13 @@ const STARTERS = [
   "मेरे पास 30 फुट × 50 फुट का प्लॉट है, सड़क पूर्व में है।",
 ];
 
+const PILLS: [string, string][] = [
+  ["Vastu check", "Check this plan for Vastu and tell me what to fix."],
+  ["Place columns", "Place the structural columns and show the column grid."],
+  ["Elevation", "Show me the front elevation in scale."],
+  ["3 BHK plan", "Make a 3 BHK plan for my plot. Ask me the plot size if you need it."],
+];
+
 export default function Chat({ full, reload, goTab }: Props) {
   const pid = full.project.id;
   const [text, setText] = useState("");
@@ -25,7 +32,7 @@ export default function Chat({ full, reload, goTab }: Props) {
   const archived = full.project.status === "archived";
   const busy = live !== null;
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [full.messages.length, live?.text, live?.events.length, full.proposals.length]);
+  useEffect(() => { if (full.messages.length || live) endRef.current?.scrollIntoView({ block: "end" }); }, [full.messages.length, live?.text, live?.events.length, full.proposals.length]);
   useEffect(() => { setPending([]); setText(""); setErr(null); }, [pid]);
 
   async function send(content: string, opts: { consent?: boolean; retry_of?: string; ids?: string[] } = {}) {
@@ -76,10 +83,11 @@ export default function Chat({ full, reload, goTab }: Props) {
       <div className="msgs" role="log" aria-live="polite" aria-relevant="additions text">
         {full.messages.length === 0 && !busy && (
           <div className="empty-chat">
-            <h3>Tell me what you want to build</h3>
+            <div className="hello"><span className="logo-mark" aria-hidden /></div>
+            <h3>What shall we design today?</h3>
             <p className="muted">Plain language is fine — English, Hindi or Hinglish. You can attach a sketch, a PDF or notes (optional). I’ll summarise your brief and ask only what I really need.</p>
             <QuickStart disabled={busy || archived} onSend={t => send(t)} />
-            <p className="muted">Ya apne shabdon mein likho:</p>
+            <p className="muted eyebrow">Or just describe it in your own words</p>
             <div className="chips">{STARTERS.map(s => <button key={s} className="chip" onClick={() => setText(s)}>{s}</button>)}</div>
           </div>
         )}
@@ -89,7 +97,7 @@ export default function Chat({ full, reload, goTab }: Props) {
         {live && (
           <div className="msg assistant">
             <div className="bubble">
-              {live.text ? <div className="txt">{live.text}</div> : !live.error && <Spinner label="Thinking…" />}
+              {live.text ? <div className="txt">{live.text}</div> : !live.error && <span className="dots" role="status" aria-label="Thinking"><i /><i /><i /></span>}
               {live.events.map((e, i) => <EventView key={i} e={e} full={full} onReply={t => send(t)} goTab={goTab} />)}
               {live.error && <ErrorBox n={live.error} />}
             </div>
@@ -109,12 +117,17 @@ export default function Chat({ full, reload, goTab }: Props) {
         <div className="compose-row">
           <input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,application/pdf,text/plain,.txt" onChange={e => onFile(e.target.files)} />
           <button type="button" className="btn icon" aria-label="Attach file (PNG, JPEG, PDF or text)" title="Attach file" disabled={busy || archived} onClick={() => fileRef.current?.click()}>📎</button>
-          <textarea aria-label="Message" rows={2} value={text} maxLength={6000} disabled={archived} placeholder="Describe the plot, rooms or a change… (Enter to send, Shift+Enter for a new line)"
+          <textarea aria-label="Message" rows={1} value={text} maxLength={6000} disabled={archived} placeholder="Ask anything about your plan…"
             onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (text.trim() && !busy) send(text.trim()); } }} />
           {busy
-            ? <button type="button" className="btn danger" onClick={() => abort.current?.abort()}>Stop</button>
-            : <button className="btn primary" disabled={!text.trim() || archived}>Send</button>}
+            ? <button type="button" className="btn danger send" aria-label="Stop" title="Stop" onClick={() => abort.current?.abort()}>■</button>
+            : <button className="btn primary send" aria-label="Send" title="Send" disabled={!text.trim() || archived}>↑</button>}
         </div>
+        {!busy && !archived && !text && (
+          <div className="pills" aria-label="Quick prompts">
+            {PILLS.map(([l, t]) => <button type="button" key={l} className="pill" onClick={() => setText(t)}>{l}</button>)}
+          </div>
+        )}
       </form>
       {consent && (
         <Modal title="Send files to the AI provider?" onClose={() => setConsent(null)}>
@@ -192,6 +205,7 @@ export function ProposalCard({ p, full, reload, goTab }: { p: Proposal; full: Fu
               <div><strong>{o.label}</strong>{o.tradeoff && <div className="muted">{o.tradeoff}</div>}
                 <ul className="mini">{(o.rooms || []).slice(0, 8).map((r: any, k: number) => <li key={k}>{r.name}: {r.clear_w}×{r.clear_d} mm, {r.area_m2} m²</li>)}</ul>
                 {o.issues?.length > 0 && <div className="note err">{o.issues.map((x: any) => x.message).join(" · ")}</div>}
+                {o.metrics && <div className="metrics" aria-label="Measures"><span>Vastu {o.metrics.vastu ?? "–"}/100</span><span>{o.metrics.built_up_m2} m² built-up</span><span>₹ {Math.round(o.metrics.cost_per_sqft_inr).toLocaleString("en-IN")}/sq ft</span><span>{o.metrics.to_check} to check</span></div>}
                 {o.stair && <small>Stair: {o.stair.risers} risers × {Math.round(o.stair.riser_mm)} mm, tread {Math.round(o.stair.tread_mm)} mm</small>}
               </div>
             </label>

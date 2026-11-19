@@ -255,6 +255,31 @@ def _door_for(model: ProjectModel, key: str):
     return None
 
 
+def _wardrobe(b: B, model: ProjectModel, s, rect, occ):
+    """A 600 mm deep wardrobe in a corner of the room that clears the bed, doors (with their swing) and windows."""
+    x0, y0, x1, y1 = rect
+    w, h = x1 - x0, y1 - y0
+    d = 600.0
+    blocks = list(occ)
+    for o in model.openings:
+        if s.key not in (o.from_space, o.to_space):
+            continue
+        m = 950.0 if o.type == "door" else 150.0
+        blocks.append((o.cx - o.width / 2 - m, o.cy - o.width / 2 - m, o.cx + o.width / 2 + m, o.cy + o.width / 2 + m))
+    for ln in (1800.0, 1500.0, 1200.0):
+        cands = [(x0, y0, x0 + ln, y0 + d), (x1 - ln, y0, x1, y0 + d), (x0, y1 - d, x0 + ln, y1), (x1 - ln, y1 - d, x1, y1),
+                 (x0, y0, x0 + d, y0 + ln), (x1 - d, y0, x1, y0 + ln), (x0, y1 - ln, x0 + d, y1), (x1 - d, y1 - ln, x1, y1)]
+        for (a, c, e, f) in cands:
+            if e - a > w + 1 or f - c > h + 1:
+                continue
+            if any(min(e, q) - max(a, p) > 1 and min(f, r) - max(c, t) > 1 for (p, t, q, r) in blocks):
+                continue
+            b.rect(a, c, e, f, "A-FURN")
+            b.line(a, c, e, f, "A-FURN")          # diagonal marks a wardrobe on plan
+            b.text((a + e) / 2, (c + f) / 2, "WARDROBE", 1.4, "A-ANNO-TEXT", "c", "m", 0.0 if e - a >= f - c else 90.0)
+            return
+
+
 def draw_furniture(b: B, model: ProjectModel):
     for s in model.spaces:
         x0, y0, x1, y1 = clear_rect(model, s)
@@ -273,10 +298,12 @@ def draw_furniture(b: B, model: ProjectModel):
             far = {"bottom": None}
             door_edge = min({"bottom": abs(dy - y0), "top": abs(dy - y1), "left": abs(dx - x0), "right": abs(dx - x1)}.items(), key=lambda kv: kv[1])[0]
             far_edge = {"bottom": "top", "top": "bottom", "left": "right", "right": "left"}[door_edge]
+            occ: list[tuple[float, float, float, float]] = []
             if far_edge in ("top", "bottom"):
                 bx0 = cx - bw / 2
                 by0 = (y1 - bl - 100) if far_edge == "top" else (y0 + 100)
                 b.rect(bx0, by0, bx0 + bw, by0 + bl, "A-FURN")
+                occ.append((bx0 - 450, by0, bx0 + bw + 450, by0 + bl))
                 py = by0 + bl - 450 if far_edge == "top" else by0
                 for px in (bx0 + 100, bx0 + bw / 2 + 50):
                     b.rect(px, py + (0 if far_edge == "bottom" else 0), px + bw / 2 - 150, py + 450, "A-FURN")
@@ -286,6 +313,8 @@ def draw_furniture(b: B, model: ProjectModel):
                 bx0 = (x1 - bl - 100) if far_edge == "right" else (x0 + 100)
                 by0 = cy - bw / 2
                 b.rect(bx0, by0, bx0 + bl, by0 + bw, "A-FURN")
+                occ.append((bx0, by0 - 100, bx0 + bl, by0 + bw + 100))
+            _wardrobe(b, model, s, (x0, y0, x1, y1), occ)
         elif s.kind == "kitchen":
             ext_edges = []
             # counter along the longest wall that is exterior (window wall) else bottom
@@ -467,7 +496,11 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     pl = model.plot
     PW, PH = pl["w"], pl["h"]
     ob = model.outer_bounds()
-    b.rect(0, 0, PW, PH, "A-SITE-BNDY", None, w=0.5)
+    poly = pl.get("polygon")
+    if poly:
+        b.poly([tuple(p) for p in poly], "A-SITE-BNDY", True, None, "cont", 0.5)
+    else:
+        b.rect(0, 0, PW, PH, "A-SITE-BNDY", None, w=0.5)
     sbk = pl["setbacks"]; src = pl["setback_source"]
     rs = pl["road_side"]
     # setback lines (front is road side)
@@ -478,7 +511,10 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     sbw = {by_world[k]: v for k, v in sbk.items()}
     srcw = {by_world[k]: src[k] for k in sbk}
     L, Rr, Bm, T = sbw["left"], sbw["right"], sbw["bottom"], sbw["top"]
-    b.rect(L, Bm, PW - Rr, PH - T, "A-SITE-SETB", None, "dash")
+    if poly and pl.get("inset"):
+        b.poly([tuple(p) for p in pl["inset"]], "A-SITE-SETB", True, None, "dash")
+    else:
+        b.rect(L, Bm, PW - Rr, PH - T, "A-SITE-SETB", None, "dash")
     # building footprint
     b.rect(ob[0], ob[1], ob[2], ob[3], "A-SITE-BLDG", "light", w=0.4)
     fp = model.footprint()
@@ -487,7 +523,7 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
             b.rect(s.x, s.y, s.x2, s.y2, "A-SITE-MISC", None, "dash")
             b.text(s.x + s.w / 2, s.y + s.h / 2, s.name.upper(), 2.0, "A-SITE-MISC", "c", "m")
     b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2, "PROPOSED BUILDING (GROUND FLOOR)" if len(model.levels) == 1 else f"PROPOSED BUILDING (G+{len(model.levels) - 1}, GROUND FLOOR FOOTPRINT)", 2.4, "A-ANNO-TEXT", "c", "m", bold=True)
-    b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2 - b.p(3.5), f"Footprint {(ob[2]-ob[0])*(ob[3]-ob[1])/1e6:.1f} m²  |  Plot {PW*PH/1e6:.1f} m²  |  Coverage {(ob[2]-ob[0])*(ob[3]-ob[1])/(PW*PH)*100:.0f}%", 1.9, "A-ANNO-TEXT", "c", "m")
+    b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2 - b.p(3.5), f"Footprint {(ob[2]-ob[0])*(ob[3]-ob[1])/1e6:.1f} m²  |  Plot {(pl.get('plot_area') or PW*PH)/1e6:.1f} m²  |  Coverage {(ob[2]-ob[0])*(ob[3]-ob[1])/(pl.get('plot_area') or PW*PH)*100:.0f}%", 1.9, "A-ANNO-TEXT", "c", "m")
     # road strip on the road side
     rd = b.p(12)
     if rs == "s":
@@ -499,18 +535,19 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     else:
         b.rect(-rd - b.p(4), -b.p(8), -b.p(4), PH + b.p(8), "A-SITE-MISC", "light"); b.text(-rd / 2 - b.p(4), PH / 2, "ROAD (width not surveyed)", 2.2, "A-SITE-MISC", "c", "m", rot=90)
     # open-space dims
+    def tag(k): return 'to box' if poly else srcw[k]
     def lab(v, s): return f"{v:.0f} ({'user' if s == 'user' else 'assumed'})"
     mx, my = (ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2
     b.dim_v(0, ob[1], mx, mx, lab(Bm, srcw["bottom"])) if False else None
     b.dim_v(0, ob[1], mx - b.p(0), mx, lab(Bm, srcw["bottom"])) if False else None
-    if Bm > 0: b.dim_v(0, ob[1], mx, mx, lab(ob[1], srcw["bottom"]) if False else f"{ob[1]:.0f} {srcw['bottom']}")
-    if T > 0: b.dim_v(ob[3], PH, mx, mx, f"{PH - ob[3]:.0f} {srcw['top']}")
-    if L > 0: b.dim_h(0, ob[0], my, my, f"{ob[0]:.0f} {srcw['left']}")
-    if Rr > 0: b.dim_h(ob[2], PW, my, my, f"{PW - ob[2]:.0f} {srcw['right']}")
+    if Bm > 0: b.dim_v(0, ob[1], mx, mx, lab(ob[1], srcw["bottom"]) if False else f"{ob[1]:.0f} {tag('bottom')}")
+    if T > 0: b.dim_v(ob[3], PH, mx, mx, f"{PH - ob[3]:.0f} {tag('top')}")
+    if L > 0: b.dim_h(0, ob[0], my, my, f"{ob[0]:.0f} {tag('left')}")
+    if Rr > 0: b.dim_h(ob[2], PW, my, my, f"{PW - ob[2]:.0f} {tag('right')}")
     # plot dims outside
     off = b.p(18) if rs != "s" else b.p(18)
-    b.dim_h(0, PW, PH, PH + b.p(10) if rs != "n" else PH + b.p(26), f"{PW:.0f}  ({fmt_ft_in(PW)})")
-    b.dim_v(0, PH, 0, -b.p(10) if rs != "w" else -b.p(26), f"{PH:.0f}  ({fmt_ft_in(PH)})")
+    b.dim_h(0, PW, PH, PH + b.p(10) if rs != "n" else PH + b.p(26), f"{PW:.0f}  ({fmt_ft_in(PW)})" + (" bounding box" if poly else ""))
+    b.dim_v(0, PH, 0, -b.p(10) if rs != "w" else -b.p(26), f"{PH:.0f}  ({fmt_ft_in(PH)})" + (" bounding box" if poly else ""))
     for k, nm in (("bottom", "S"), ("top", "N")):
         pass
     # open area labels
@@ -520,6 +557,8 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     b.text(0, -b.p(36) if rs != "s" else -rd - b.p(24), "Vehicular / pedestrian access: from the road frontage (gate position to be confirmed by the owner).", 1.9, valign="t")
     b.north_arrow(PW + b.p(30) if rs != "e" else PW + rd + b.p(30), PH + b.p(4))
     b.scale_bar(0, -b.p(60) if rs != "s" else -rd - b.p(44), S)
+    if poly:
+        b.text(0, -b.p(42) if rs != "s" else -rd - b.p(29), "Irregular plot from entered corners (not a survey). 'to box' = distance to the plot's bounding box; dashed line = your open space inside the boundary.", 1.9, valign="t")
     b.text(0, -b.p(50) if rs != "s" else -rd - b.p(34), "Setback / open-space values: 'user' = supplied by the user, 'assumed' = concept assumption, verify with local authority rules.", 1.9, valign="t")
     meta = dict(plot=[PW, PH], footprint=[ob[2] - ob[0], ob[3] - ob[1]], setbacks=sbk, source=src)
     return ViewResult(vd.id, "SITE PLAN", b.prims, bbox_of(b.prims, S), S, meta)
@@ -942,17 +981,14 @@ def structure_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
             b.rect(w.x1 - t, min(w.y1, w.y2) - t, w.x1 + t, max(w.y1, w.y2) + t, "A-SECT-BEYOND")
     for w in model.walls:                                         # plinth / roof beams run on every wall line
         b.line(w.x1, w.y1, w.x2, w.y2, "S-BEAM", "center")
-    cnt: dict[tuple[int, int], int] = {}
-    for w in model.walls:
-        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
-            k = (round(x / 10) * 10, round(y / 10) * 10)
-            cnt[k] = cnt.get(k, 0) + 1
-    cols = sorted([k for k, n in cnt.items() if n >= 2], key=lambda k: (-k[1], k[0]))
-    for i, (x, y) in enumerate(cols, 1):
+    from .structural import columns as _columns
+    cols = _columns(model)
+    for c in cols:
+        x, y, i = c["x"], c["y"], int(c["label"][1:])
         fs = sz["footing"] / 2
         b.rect(x - fs, y - fs, x + fs, y + fs, "S-FOOT", None, "dash")
         b.rect(x - sz["col_b"] / 2, y - sz["col_d"] / 2, x + sz["col_b"] / 2, y + sz["col_d"] / 2, "S-COL", "mid")
-        b.text(x + sz["col_b"] / 2 + b.p(1), y + sz["col_d"] / 2 + b.p(1), f"C{i}", 1.8, "A-ANNO-TEXT", "l", "b", bold=True)
+        b.text(x + sz["col_b"] / 2 + b.p(1), y + sz["col_d"] / 2 + b.p(1), c["label"] + ("*" if c["user"] else ""), 1.8, "A-ANNO-TEXT", "l", "b", bold=True)
     b.dim_h(ob[0], ob[2], ob[3], ob[3] + b.p(10), f"{ob[2]-ob[0]:.0f}")
     b.dim_v(ob[1], ob[3], ob[0], ob[0] - b.p(10), f"{ob[3]-ob[1]:.0f}")
     b.north_arrow(ob[2] + b.p(24), ob[3] + b.p(4))
@@ -963,10 +999,11 @@ def structure_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
              ("Rule-of-thumb sizes for early planning. Not a structural design.", 2.0, False),
              ("A licensed structural engineer must design and check all members", 2.0, False),
              ("against current IS codes using a soil investigation report.", 2.0, False), ("", 2.0, False),
-             (f"COLUMNS C1-C{len(cols)}: {sz['col_b']:.0f} x {sz['col_d']:.0f} mm RCC (M20 / Fe500), at wall corners and junctions", 2.0, False),
+             (f"COLUMNS C1-C{len(cols)}: {sz['col_b']:.0f} x {sz['col_d']:.0f} mm RCC (M20 / Fe500), at wall corners and junctions, plus any you placed", 2.0, False),
              (f"FOOTINGS: {sz['footing']:.0f} x {sz['footing']:.0f} x {sz['footing_depth']:.0f} mm under each column (assumed SBC 150 kN/m2)", 2.0, False),
              (f"ROOF BEAMS: {sz['beam_b']:.0f} x {sz['beam_d']:.0f} mm on wall lines;  PLINTH BEAM 230 x 300 mm", 2.0, False),
              (f"ROOF SLAB: {sz['slab']:.0f} mm thick (model {model.levels[0].slab:.0f} mm)", 2.0, False), ("", 2.0, False),
+             *([(f"* = column placed or moved at the owner's request ({sum(1 for c in cols if c['user'])}); position needs the engineer's confirmation", 1.8, True)] if any(c["user"] for c in cols) else []),
              ("Beam and column positions follow the architectural walls (dash-dot lines);", 1.8, False),
              ("column grid is indicative and not optimised. Footings may overlap and need design.", 1.8, False)]
     for txt, h, bold in lines:
@@ -976,8 +1013,124 @@ def structure_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> V
     return ViewResult(vd.id, "STRUCTURAL LAYOUT (PRELIMINARY)", b.prims, bbox_of(b.prims, S), S, dict(columns=len(cols), sizes=sz))
 
 
+def _sym_electrical(b: B, kind: str, x: float, y: float):
+    r = b.p(1.4)
+    if kind == "light":
+        b.circle(x, y, r, "E-LITE"); b.line(x - r * .7, y - r * .7, x + r * .7, y + r * .7, "E-LITE"); b.line(x - r * .7, y + r * .7, x + r * .7, y - r * .7, "E-LITE")
+    elif kind == "fan":
+        b.circle(x, y, b.p(2.6), "E-LITE"); b.circle(x, y, b.p(0.5), "E-LITE", "mid")
+        for a in (90, 210, 330):
+            b.line(x, y, x + b.p(2.6) * math.cos(math.radians(a)), y + b.p(2.6) * math.sin(math.radians(a)), "E-LITE")
+    elif kind == "switch":
+        b.rect(x - b.p(0.8), y - b.p(0.6), x + b.p(0.8), y + b.p(0.6), "E-LITE", "mid")
+    elif kind == "socket":
+        b.circle(x, y, b.p(0.9), "E-POWR"); b.line(x - b.p(0.9), y, x + b.p(0.9), y, "E-POWR")
+    elif kind == "db":
+        b.rect(x - b.p(2.2), y - b.p(1.4), x + b.p(2.2), y + b.p(1.4), "E-DIST", "mid"); b.text(x, y + b.p(1.9), "DB", 1.8, "E-DIST", "c", "b", bold=True)
+    else:
+        lab = dict(ac="AC", tv="TV", exhaust="EF", chimney="CH", geyser="G", fridge="RF").get(kind, "?")
+        b.rect(x - b.p(1.7), y - b.p(1.1), x + b.p(1.7), y + b.p(1.1), "E-POWR"); b.text(x, y, lab, 1.4, "E-POWR", "c", "m")
+
+
+def _mep_notes(b: B, x: float, y: float, lines: list[tuple[str, float, bool]]):
+    for txt, h, bold in lines:
+        if txt:
+            b.text(x, y, txt, h, "A-ANNO-TEXT", "l", "t", bold=bold)
+        y -= b.p(h + 2.4)
+
+
+def mep_view(model: ProjectModel, vd: ViewDef, S: int, project: dict, full: ProjectModel | None = None) -> ViewResult:
+    """CONCEPT electrical or plumbing layout on the plan. A conversation starter for an electrician or plumber, not a design."""
+    from .mep import electrical, plumbing
+    full = full or model
+    b = B(S)
+    draw_walls_plan(b, model, vd.level)
+    draw_openings_plan(b, model)
+    draw_room_labels(b, model, detail=False)
+    ob = model.outer_bounds()
+    lvl = model.level(vd.level)
+    gf = vd.level == full.levels[0].id
+    pl = model.plot
+    if pl and gf:
+        b.rect(0, 0, pl["w"], pl["h"], "A-SITE-BNDY", None, "dash")
+    meta: dict = dict(discipline=vd.discipline, level=vd.level)
+    nx = ob[2] + b.p(34)
+    if vd.discipline == "electrical":
+        e = electrical(model)
+        for pt in e["points"]:
+            _sym_electrical(b, pt["kind"], pt["x"], pt["y"])
+        names = dict(light="Light point", fan="Ceiling fan point", switch="Switch board", socket="Power socket", ac="Air conditioner point", tv="TV point",
+                     exhaust="Exhaust fan", chimney="Kitchen chimney point", geyser="Water heater point", fridge="Refrigerator socket", db="Distribution board")
+        lines = [("CONCEPT - NOT AN ELECTRICAL DESIGN", 3.0, True), ("Point positions are indicative. A licensed electrician must design, size and", 2.0, False),
+                 ("install the wiring to the current electrical code and local utility rules.", 2.0, False), ("", 2.0, False), ("POINTS ON THIS FLOOR", 2.4, True)]
+        for k, lab in names.items():
+            if e["counts"].get(k):
+                lines.append((f"{lab}: {e['counts'][k]}", 2.0, False))
+        lines += [("", 2.0, False), (f"Connected load on this floor about {e['connected_load_kw']} kW before diversity.", 2.0, False), ("", 2.0, False), ("SUGGESTED CIRCUITS (this floor)", 2.4, True)]
+        lines += [(f"{c['name']}: {c['points']} pt, {c['mcb']} MCB, {c['wire']}", 2.0, False) for c in e["circuits"]]
+        _mep_notes(b, nx, ob[3], lines)
+        meta.update(counts=e["counts"], load_kw=e["connected_load_kw"])
+        title = f"ELECTRICAL LAYOUT, {lvl.name.upper()} (CONCEPT)"
+    else:
+        pm = plumbing(model)
+        pfull = plumbing(full) if gf else pm
+        for st in pm["stacks"]:
+            b.circle(st["x"], st["y"], st["dia"] / 2, "P-DRAN", "mid")
+            b.text(st["x"] + st["dia"], st["y"] + st["dia"], st["id"], 1.6, "P-DRAN", "l", "b", bold=True)
+        lab = dict(wc="WC", basin="WB", shower="SH", sink="SK")
+        for f in pm["fixtures"]:
+            b.circle(f["x"], f["y"], b.p(1.2), "P-FIXT"); b.text(f["x"], f["y"] + b.p(1.8), lab[f["kind"]], 1.4, "P-FIXT", "c", "b")
+        for st in pm["stacks"]:                                      # cold supply: chain of fixtures from the riser next to each stack
+            fx = [f for f in pm["fixtures"] if f["room"] == st["room"]]
+            prev = (st["x"], st["y"])
+            for f in sorted(fx, key=lambda f: math.hypot(f["x"] - prev[0], f["y"] - prev[1])):
+                b.line(prev[0], prev[1], f["x"], f["y"], "P-SUPP", "dash"); prev = (f["x"], f["y"])
+        notes: list[tuple[str, float, bool]] = [("CONCEPT - NOT A PLUMBING DESIGN", 3.0, True), ("Positions, pipe sizes and tank sizes are typical values for early", 2.0, False),
+                                                  ("planning. A licensed plumber or engineer must design them to local code.", 2.0, False), ("", 2.0, False)]
+        if gf:
+            for c in pm["chambers"]:
+                b.rect(c["x"] - 225, c["y"] - 225, c["x"] + 225, c["y"] + 225, "P-SEPT"); b.text(c["x"], c["y"] + 330, c["id"], 1.5, "P-SEPT", "c", "b")
+            for r in pm["runs"]:
+                b.poly(r["path"], "P-DRAN", False, None, "center")
+                mx, my = r["path"][1]
+                b.text(mx + 150, my - 150, f"{r['dia']} dia @ {r['slope']}", 1.4, "P-DRAN", "l", "t")
+            sp = pfull["septic"]["place"]
+            tk = pfull["septic"]["tank"]
+            if sp:
+                x0, y0, x1, y1 = sp["cx"] - sp["w"] / 2, sp["cy"] - sp["h"] / 2, sp["cx"] + sp["w"] / 2, sp["cy"] + sp["h"] / 2
+                b.rect(x0, y0, x1, y1, "P-SEPT", None, "cont", 0.35); b.line(x0, y0, x1, y1, "P-SEPT"); b.line(x0, y1, x1, y0, "P-SEPT")
+                b.text(sp["cx"], y0 - b.p(1.2), "SEPTIC TANK", 1.7, "P-SEPT", "c", "t", bold=True)
+                b.text(sp["cx"], y0 - b.p(4.2), f"{tk['length_m']:.1f} x {tk['breadth_m']:.2f} x {tk['depth_m']:.1f} m", 1.5, "P-SEPT", "c", "t")
+            notes += [("DRAINAGE", 2.4, True), (f"Soil stacks: {len(pfull['stacks'])}, inspection chambers: {len(pfull['chambers'])}", 2.0, False),
+                      (f"Septic tank for about {pfull['septic']['users']} users ({USERS_FORMULA_TXT}): inner {tk['length_m']:.1f} x {tk['breadth_m']:.2f} m, liquid depth {tk['depth_m']:.1f} m", 2.0, False)]
+            if sp and not sp["fits"]:
+                notes.append(("WARNING: the open space is too tight for this tank. Enlarge the open space or use another treatment.", 2.0, True))
+            elif not sp:
+                notes.append(("WARNING: no open space found for a tank.", 2.0, True))
+            else:
+                notes.append((f"Tank placed in the {sp['side']} open space with about {sp['clearance_mm']:.0f} mm to spare.", 2.0, False))
+            for wmsg in pfull["warnings"]:
+                for ln in _wrap(wmsg, 130, 2.0):
+                    notes.append((ln, 2.0, True))
+            notes += [("Soak pit or sewer connection after the tank: to be confirmed locally.", 2.0, False), ("", 2.0, False), ("WATER", 2.4, True)]
+            w = pfull["water"]
+            notes += [(f"Demand about {w['demand_l_per_day']} litres per day at {w['lpcd']:.0f} litres per person", 2.0, False),
+                      (f"Underground sump about {w['sump_l']} litres, overhead tank about {w['oht_l']} litres", 2.0, False)]
+            meta.update(septic=pfull["septic"], water=w, stacks=len(pfull["stacks"]))
+        else:
+            notes += [("Soil stacks continue down to the ground floor drains.", 2.0, False)]
+        _mep_notes(b, nx, ob[3], notes)
+        title = f"PLUMBING AND DRAINAGE, {lvl.name.upper()} (CONCEPT)"
+    b.north_arrow(ob[2] + b.p(24), ob[3] + b.p(6))
+    b.scale_bar(ob[0], ob[1] - b.p(36), S)
+    return ViewResult(vd.id, title, b.prims, bbox_of(b.prims, S), S, meta)
+
+
+USERS_FORMULA_TXT = "2 per bedroom plus 1"
+
+
 BUILDERS = dict(plan=plan_view, site=site_view, roof=roof_view, elevation=elevation_view, section=section_view,
-                rooms=rooms_schedule, openings=openings_schedule, index=index_view, structure=structure_view)
+                rooms=rooms_schedule, openings=openings_schedule, index=index_view, structure=structure_view, mep=mep_view)
 
 
 def build_view(model: ProjectModel, vd: ViewDef, S: int, project: dict | None = None) -> ViewResult:
@@ -985,4 +1138,6 @@ def build_view(model: ProjectModel, vd: ViewDef, S: int, project: dict | None = 
         model = model.at_level(vd.level)
     elif vd.type == "structure":
         model = model.at_level(model.levels[0].id)
+    elif vd.type == "mep":
+        return mep_view(model.at_level(vd.level), vd, S, project or {}, full=model)
     return BUILDERS[vd.type](model, vd, S, project or {})

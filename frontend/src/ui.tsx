@@ -43,7 +43,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
   return (
     <div className="modal-bg" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={"modal" + (wide ? " wide" : "")} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
-        <header><h2>{title}</h2><button className="btn ghost sm" onClick={onClose} aria-label="Close dialog">✕</button></header>
+        <header><div className="mh-l"><button className="btn ghost sm back" onClick={onClose} aria-label="Back">← Back</button><h2>{title}</h2></div><button className="btn ghost sm" onClick={onClose} aria-label="Close dialog">✕</button></header>
         <div className="modal-body">{children}</div>
       </div>
     </div>

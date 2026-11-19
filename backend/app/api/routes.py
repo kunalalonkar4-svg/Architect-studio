@@ -26,7 +26,7 @@ from ..engine.sheets import SheetOverflow
 from ..models import AIUsage, Artifact, Attachment, Job, Message, Project, Proposal, Revision, User, now
 from ..security import current_user, hash_password, make_token, owned_project, verify_password
 from ..services import (ServiceError, affected_sheets, autofit, create_revision, enqueue_export, enqueue_render, evaluate_edit, precheck_export,
-                        sheet_meta, sheet_meta_for)
+                        new_proposal, sheet_meta, sheet_meta_for)
 
 router = APIRouter(prefix="/api")
 
@@ -305,6 +305,44 @@ def run_op(db, u, p, name, payload) -> JSONResponse:
 def put_brief(pid: str, b: UpdateBrief, u: User = Depends(current_user), db: Session = Depends(get_db)):
     p = owned_project(db, u, pid)
     return run_op(db, u, p, "update_brief", b.model_dump(exclude_none=True))
+
+
+class PlotShapeIn(BaseModel):
+    points_mm: Optional[list[list[float]]] = None    # corners (x east, y north) in millimetres; omit with clear=true to go back to a rectangle
+    clear: bool = False
+
+
+@router.put("/projects/{pid}/plot-shape")
+def plot_shape(pid: str, b: PlotShapeIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Irregular convex plot from corner points. With a drawing already made, the change comes back as a proposal to confirm."""
+    from ..engine.layout import ImpossibleLayout
+    from ..engine.plotshape import frontage_depth, normalise
+    p = owned_project(db, u, pid)
+    brief = Brief.model_validate(p.brief or {})
+    if b.clear:
+        fields = dict(plot_polygon_mm=None)
+    else:
+        if not b.points_mm:
+            return svc_error(ServiceError("no_points", "Enter the plot corners.", ["Add at least three corners"], status=422))
+        if not brief.road_side:
+            return svc_error(ServiceError("road_side_first", "Say which side faces the road before entering the plot corners.", ["Set the road side in the brief"], status=422))
+        try:
+            pts = normalise(b.points_mm)
+        except ImpossibleLayout as e:
+            return svc_error(ServiceError("bad_plot_shape", "; ".join(e.reasons), e.suggestions, status=422))
+        fr, dp = frontage_depth(pts, brief.road_side)
+        fields = dict(plot_polygon_mm=pts, plot_frontage_mm=fr, plot_depth_mm=dp)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if rev:
+        out = aiops._make_edit_proposal(aiops.Ctx(db, p, u), rev, [dict(op="set_brief", fields=fields)], [], "Change the plot shape")
+        if not out.is_error and out.result.get("proposal_id"):
+            db.add(Message(project_id=p.id, role="system", content="Plot shape change is ready to review.", events=[dict(type="proposal", proposal_id=out.result["proposal_id"])]))
+        db.commit()
+        return JSONResponse(dict(ok=not out.is_error, result=out.result), status_code=422 if out.is_error else 200)
+    for k, v in fields.items():
+        setattr(brief, k, v)
+    p.brief = brief.model_dump(); db.commit()
+    return dict(ok=True, brief=brief.model_dump(), missing=brief.missing())
 
 
 class GenerateIn(BaseModel):
@@ -623,14 +661,92 @@ def create_export(pid: str, b: ExportIn, u: User = Depends(current_user), db: Se
     return dict(job=job_json(db, j))
 
 
+@router.post("/projects/{pid}/options")
+def layout_options(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Offer up to three alternative layouts, each with Vastu score, area, cost per sq ft and open checks. The user picks one in the app."""
+    from ..engine.edits import EditError
+    from ..engine.variants import make_variants, measures
+    from ..ai.ops import _room_dims
+    from ..engine.validate import validate_model
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "Generate a first layout before comparing options.", ["Generate the layout first"], status=404))
+    brief, base = Brief.model_validate(rev.brief), ProjectModel.model_validate(rev.model)
+    try:
+        vs = make_variants(brief, base, p.use_assumptions)
+    except EditError as e:
+        return svc_error(ServiceError(e.code, e.message, e.options))
+    if not vs:
+        return svc_error(ServiceError("no_alternatives", "No different layout fits this plot with the current brief.", ["Change the plot, bedrooms or open space and try again"]))
+    opts = [dict(label=v["label"], tradeoff=v["tradeoff"], ops=v["ops"], rooms=_room_dims(v["model"]), metrics=v["metrics"],
+                 stair=v["model"].stairs[0].flight.model_dump() if v["model"].stairs and v["model"].stairs[0].flight else None,
+                 issues=[i for i in validate_model(v["model"]) if i["severity"] != "info"]) for v in vs]
+    pr = new_proposal(db, p, rev, "options", [], [], "Compare these layouts and choose one", [], [], options=opts)
+    db.add(Message(project_id=p.id, role="system", content="Layout options are ready to compare.", events=[dict(type="options", proposal_id=pr.id)]))
+    db.commit()
+    return dict(proposal_id=pr.id, current=measures(brief, base), options=[dict(label=o["label"], metrics=o["metrics"]) for o in opts])
+
+
 @router.get("/projects/{pid}/estimate")
-def estimate_api(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+def estimate_api(pid: str, finish: str = "standard", concrete: str = "M20", masonry: str = "brick", region: str = "standard",
+                 u: User = Depends(current_user), db: Session = Depends(get_db)):
     from ..engine.estimate import estimate
     p = owned_project(db, u, pid)
     rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
     if not rev:
         return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to estimate.", ["Generate the layout first"], status=404))
-    return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model)))
+    return dict(revision=rev.number, **estimate(ProjectModel.model_validate(rev.model), finish, concrete, masonry, region))
+
+
+def model3d_payload(m: ProjectModel, revision: int) -> dict:
+    return dict(revision=revision, plot=m.plot, ext_t=m.params.ext_t,
+                levels=[l.model_dump() for l in m.levels],
+                walls=[dict(id=w.id, level=w.level, x1=w.x1, y1=w.y1, x2=w.x2, y2=w.y2, t=w.thickness, kind=w.kind) for w in m.walls],
+                openings=[dict(mark=o.mark, level=o.level, type=o.type, cx=o.cx, cy=o.cy, w=o.width, h=o.height, sill=o.sill, host=o.host) for o in m.openings],
+                spaces=[dict(key=s.key, name=s.name, kind=s.kind, level=s.level, x=s.x, y=s.y, w=s.w, h=s.h, open=s.open_boundary) for s in m.spaces],
+                stairs=[dict(level=st.level, x=st.x, y=st.y, w=st.w, h=st.h) for st in m.stairs])
+
+
+@router.get("/projects/{pid}/model3d")
+def model3d_api(pid: str, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Geometry for the 3D view: the same canonical model the drawings come from (millimetres, +y north)."""
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to show in 3D.", ["Generate the layout first"], status=404))
+    return model3d_payload(ProjectModel.model_validate(rev.model), rev.number)
+
+
+@router.get("/projects/{pid}/site-pack")
+def site_pack_api(pid: str, format: str = "json", u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Owner's build checklist, specification notes and questions for the contractor. A checklist, not a contract document."""
+    from ..engine.handover import site_pack, to_markdown
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is no site pack.", ["Generate the layout first"], status=404))
+    pack = site_pack(ProjectModel.model_validate(rev.model), Brief.model_validate(rev.brief))
+    if format == "md":
+        safe = "".join(ch if ch.isalnum() else "-" for ch in p.name)[:40].strip("-") or "project"
+        return Response(to_markdown(pack, p.name), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="site-pack-{safe}.md"', "X-Content-Type-Options": "nosniff"})
+    return dict(revision=rev.number, **pack)
+
+
+@router.get("/projects/{pid}/review")
+def review_api(pid: str, far: float | None = None, coverage: float | None = None, height: float | None = None, window_ratio: float = 0.10, latitude: float | None = None,
+               u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Design review: planning limits (only against values you supply), Vastu, light and ventilation, column grid."""
+    from ..engine.review import review
+    p = owned_project(db, u, pid)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if not rev:
+        return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to review.", ["Generate the layout first"], status=404))
+    for name, v, lo, hi in (("FAR", far, 0.1, 10), ("Ground coverage", coverage, 1, 100), ("Height", height, 2, 200), ("Window ratio", window_ratio, 0.02, 0.5), ("Latitude", latitude, -66, 66)):
+        if v is not None and not lo <= v <= hi:
+            return svc_error(ServiceError("bad_limit", f"{name} must be between {lo} and {hi}.", ["Use the value from your local rules"]))
+    return dict(revision=rev.number, **review(ProjectModel.model_validate(rev.model), far, coverage, height, window_ratio, latitude))
 
 
 @router.get("/projects/{pid}/estimate.xlsx")
@@ -653,7 +769,7 @@ def estimate_xlsx(pid: str, rates: str = "", cont: float = 5.0, u: User = Depend
 
 
 @router.get("/projects/{pid}/structure")
-def structure_api(pid: str, sbc: float = 150.0, u: User = Depends(current_user), db: Session = Depends(get_db)):
+def structure_api(pid: str, sbc: float = 150.0, floors: int | None = None, u: User = Depends(current_user), db: Session = Depends(get_db)):
     from ..engine.structural import prelim
     p = owned_project(db, u, pid)
     rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
@@ -661,7 +777,9 @@ def structure_api(pid: str, sbc: float = 150.0, u: User = Depends(current_user),
         return svc_error(ServiceError("no_drawing", "There is no drawing yet, so there is nothing to size.", ["Generate the layout first"], status=404))
     if not 50 <= sbc <= 600:
         return svc_error(ServiceError("bad_sbc", "Safe bearing capacity must be between 50 and 600 kN/m².", ["Use the value from your soil test report"]))
-    return dict(revision=rev.number, **prelim(ProjectModel.model_validate(rev.model), sbc_kn_m2=sbc))
+    if floors is not None and not 1 <= floors <= 4:
+        return svc_error(ServiceError("bad_floors", "Planned floors must be between 1 and 4.", ["Enter how many floors you may build in total"]))
+    return dict(revision=rev.number, **prelim(ProjectModel.model_validate(rev.model), sbc_kn_m2=sbc, planned_floors=floors))
 
 
 @router.get("/projects/{pid}/jobs")

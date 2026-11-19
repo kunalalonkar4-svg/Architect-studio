@@ -32,6 +32,13 @@ LAYERS = {
     "A-TABLE": (7, (0.0, 0.0, 0.0), 0.18, "Schedule tables"),
     "S-COL": (1, (0.0, 0.0, 0.0), 0.35, "Columns (preliminary)"),
     "S-FOOT": (5, (0.0, 0.0, 0.0), 0.18, "Footings (preliminary)"),
+    "E-LITE": (2, (0.55, 0.40, 0.0), 0.18, "Lighting, fans and switches (concept)"),
+    "E-POWR": (1, (0.70, 0.10, 0.10), 0.18, "Power points and appliances (concept)"),
+    "E-DIST": (1, (0.70, 0.10, 0.10), 0.35, "Distribution board"),
+    "P-SUPP": (5, (0.05, 0.30, 0.70), 0.15, "Water supply (concept)"),
+    "P-FIXT": (5, (0.05, 0.30, 0.70), 0.18, "Plumbing fixtures"),
+    "P-DRAN": (30, (0.45, 0.25, 0.05), 0.25, "Soil and waste drains (concept)"),
+    "P-SEPT": (30, (0.45, 0.25, 0.05), 0.35, "Inspection chambers and septic tank (concept)"),
     "S-BEAM": (4, (0.2, 0.2, 0.2), 0.18, "Plinth / roof beams (preliminary)"),
 }
 

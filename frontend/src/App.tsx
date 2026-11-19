@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, AiStatus, getToken, User } from "./api";
 import Landing from "./Landing";
+import PublicView, { parseHash } from "./PublicView";
 import Settings from "./Settings";
 import Sidebar from "./Sidebar";
 import Workspace, { useWide } from "./Workspace";
@@ -11,22 +12,28 @@ export default function App() {
   const [booting, setBooting] = useState(!!getToken());
   const [pid, setPid] = useState<string | null>(() => { try { return localStorage.getItem("drafta.pid"); } catch { return null; } });
   const [key, setKey] = useState(0); const [settings, setSettings] = useState(false); const [drawer, setDrawer] = useState(false);
-  const wide = useWide();
+  const wide = useWide(); const [home, setHome] = useState(false);
+  const [hash, setHash] = useState(() => location.hash);
+  useEffect(() => { const f = () => setHash(location.hash); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  const pub = parseHash(hash);
   useEffect(() => { if (!getToken()) return; api("/auth/me").then(r => { setUser(r.user); setAi(r.ai); }).catch(() => undefined).finally(() => setBooting(false)); }, []);
   useEffect(() => { try { pid ? localStorage.setItem("drafta.pid", pid) : localStorage.removeItem("drafta.pid"); } catch { /* ignore */ } }, [pid]);
+  if (pub) return <PublicView route={pub} />;
   if (booting) return <div className="pane-center"><Spinner label="Starting…" /></div>;
+  if (home && user && ai) return <Landing authed onOpenApp={() => { setHome(false); window.scrollTo(0, 0); }} onAuthed={() => undefined} />;
   if (!user || !ai) return <Landing onAuthed={(u, a) => { setUser(u); setAi(a); }} />;
   const bump = () => setKey(k => k + 1);
-  const side = <Sidebar activeId={pid} onSelect={id => { setPid(id); setDrawer(false); }} refreshKey={key} onChanged={bump} onSettings={() => setSettings(true)} user={user.firm_name || user.display_name} onClose={wide ? undefined : () => setDrawer(false)} />;
+  const side = <Sidebar activeId={pid} onSelect={id => { setPid(id); setDrawer(false); }} refreshKey={key} onChanged={bump} onSettings={() => setSettings(true)} user={user.firm_name || user.display_name} onClose={wide ? undefined : () => setDrawer(false)} onHome={() => { setHome(true); setDrawer(false); window.scrollTo(0, 0); }} />;
   return (
     <div className="app">
       {wide ? <aside className="side-fixed">{side}</aside> : drawer && <div className="drawer-bg" onClick={() => setDrawer(false)}><aside className="drawer" onClick={e => e.stopPropagation()}>{side}</aside></div>}
       <main className="main">
         {!wide && <div className="topbar"><button className="btn ghost" aria-label="Open project list" onClick={() => setDrawer(true)}>☰ Projects</button><span className="brand small"><span className="logo-mark" aria-hidden /> Drafta</span></div>}
-        {pid ? <Workspace key={pid} pid={pid} onListChanged={bump} /> : (
+        {pid ? <Workspace key={pid} pid={pid} onListChanged={bump} onBack={() => (wide ? setPid(null) : setDrawer(true))} /> : (
           <div className="pane-center welcome">
             <h2>Welcome{user.display_name ? `, ${user.display_name}` : ""}</h2>
             <p className="muted">Create a project, then tell us the plot size and BHK. You get the plan, elevations, section and an estimate.</p>
+            <button className="btn" onClick={() => setHome(true)}>⌂ Home page</button>
             {wide ? <p className="muted">Use “New project” on the left.</p> : <button className="btn primary" onClick={() => setDrawer(true)}>Open projects</button>}
             <p className="fine">Concept drawings only — not reviewed, signed or approved. Check local rules with a licensed professional.</p>
           </div>)}

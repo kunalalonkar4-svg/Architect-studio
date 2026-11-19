@@ -3,7 +3,8 @@ import { api, download, Full } from "./api";
 import { ErrorBox, Notice, Spinner, toNotice } from "./ui";
 
 interface Item { id: string; name: string; unit: string; qty: number; basis: string }
-interface Est { revision: number; currency: string; built_up_m2: number; carpet_m2: number; items: Item[]; rates: Record<string, number>; disclaimer: string }
+interface Opts { selected: Record<string, string>; choices: Record<string, string[]> }
+interface Est { options: Opts; revision: number; currency: string; built_up_m2: number; carpet_m2: number; items: Item[]; rates: Record<string, number>; disclaimer: string }
 const inr = (n: number) => "₹ " + Math.round(n).toLocaleString("en-IN");
 
 export default function EstimatePanel({ full }: { full: Full }) {
@@ -26,18 +27,20 @@ interface Struct { revision: number; assumptions: Record<string, any>; items: SI
 
 function StructureView({ full }: { full: Full }) {
   const pid = full.project.id; const revId = full.current?.id;
-  const [sbc, setSbc] = useState("150"); const [d, setD] = useState<Struct | null>(null); const [err, setErr] = useState<Notice | null>(null);
+  const [sbc, setSbc] = useState("150"); const [floors, setFloors] = useState(""); const [d, setD] = useState<Struct | null>(null); const [err, setErr] = useState<Notice | null>(null);
   useEffect(() => {
     if (!revId) return; let off = false; setErr(null);
-    const t = setTimeout(() => api<Struct>(`/projects/${pid}/structure?sbc=${encodeURIComponent(sbc)}`).then(x => !off && setD(x)).catch(e => !off && setErr(toNotice(e))), 300);
+    const t = setTimeout(() => api<Struct>(`/projects/${pid}/structure?sbc=${encodeURIComponent(sbc)}${floors ? `&floors=${floors}` : ""}`).then(x => !off && setD(x)).catch(e => !off && setErr(toNotice(e))), 300);
     return () => { off = true; clearTimeout(t); };
-  }, [pid, revId, sbc]);
+  }, [pid, revId, sbc, floors]);
   if (!full.current) return <div className="empty-pane"><h3>No drawing yet</h3><p className="muted">Generate the drawings first.</p></div>;
   return (
     <div className="panel">
       <h3>Preliminary structure · revision {d?.revision ?? full.current.number}</h3>
       <div className="banner warn slim">Rough sizes for early planning only. Not a structural design. A licensed structural engineer must design and check everything.</div>
       <label>Soil safe bearing capacity (kN/m²)<small> — from your soil test; 150 is only an assumption</small><input inputMode="decimal" value={sbc} onChange={e => setSbc(e.target.value)} /></label>
+      <label>Floors you may build in total<small> — columns and footings are sized for this, so a later floor needs no strengthening</small>
+        <select value={floors} onChange={e => setFloors(e.target.value)}><option value="">Only what is drawn now</option><option value="2">2 floors</option><option value="3">3 floors</option><option value="4">4 floors</option></select></label>
       <ErrorBox n={err} />
       {!d && !err && <Spinner label="Calculating…" />}
       {d && d.items.map(i => (
@@ -54,18 +57,20 @@ function CostView({ full }: { full: Full }) {
   const pid = full.project.id; const revId = full.current?.id;
   const [est, setEst] = useState<Est | null>(null); const [err, setErr] = useState<Notice | null>(null);
   const [rates, setRates] = useState<Record<string, string>>({}); const [cont, setCont] = useState("10");
-  const key = `drafta.rates.${pid}`;
+  const [opt, setOpt] = useState<Record<string, string>>({ finish: "standard", concrete: "M20", masonry: "brick", region: "standard" });
+  const optKey = Object.values(opt).join("-");
+  const key = `drafta.rates.${pid}.${optKey}`;
 
   useEffect(() => {
     if (!revId) { setEst(null); return; }
     let off = false; setErr(null);
-    api<Est>(`/projects/${pid}/estimate`).then(e => {
+    api<Est>(`/projects/${pid}/estimate?${new URLSearchParams(opt)}`).then(e => {
       if (off) return; setEst(e);
       let saved: Record<string, string> = {}; try { saved = JSON.parse(localStorage.getItem(key) || "{}"); } catch { /* ignore */ }
       setRates(Object.fromEntries(Object.entries(e.rates).map(([k, v]) => [k, saved[k] ?? String(v)])));
     }).catch(e => !off && setErr(toNotice(e)));
     return () => { off = true; };
-  }, [pid, revId]);
+  }, [pid, revId, optKey]);
   useEffect(() => { if (Object.keys(rates).length) try { localStorage.setItem(key, JSON.stringify(rates)); } catch { /* ignore */ } }, [rates]);
 
   const rows = useMemo(() => (est?.items ?? []).map(i => { const r = parseFloat(rates[i.id] ?? "0") || 0; return { ...i, rate: r, amount: i.qty * r }; }), [est, rates]);
@@ -83,6 +88,13 @@ function CostView({ full }: { full: Full }) {
     <div className="panel">
       <h3>Cost estimate · revision {est.revision}</h3>
       <div className="grid2"><div className="stat"><small>Built-up (outer footprint)</small><b>{est.built_up_m2} m²</b></div><div className="stat"><small>Room floor area</small><b>{est.carpet_m2} m²</b></div></div>
+      <div className="grid2" role="group" aria-label="Estimate options">
+        {([["finish", "Finish level", { basic: "Basic", standard: "Standard", premium: "Premium" }],
+           ["concrete", "Concrete grade", { M20: "M20", M25: "M25", M30: "M30" }],
+           ["masonry", "Walling", { brick: "Brick", aac: "AAC block", flyash: "Fly-ash brick" }],
+           ["region", "Rate level", { small_town: "Small town (−10%)", standard: "Standard", metro: "Metro (+15%)" }]] as [string, string, Record<string, string>][]).map(([id, label, names]) => (
+          <label key={id}>{label}<select value={opt[id]} onChange={e => setOpt(p => ({ ...p, [id]: e.target.value }))}>{est.options.choices[id].map(c => <option key={c} value={c}>{names[c] ?? c}</option>)}</select></label>))}
+      </div>
       <div className="banner warn slim">Rates are placeholders. Replace them with your local rates. This is not a quotation.</div>
       <div className="est">
         {rows.map(r => (
@@ -94,7 +106,7 @@ function CostView({ full }: { full: Full }) {
           </div>
         ))}
         <div className="est-row"><div className="est-name"><strong>Contingency</strong></div><div className="est-qty" /><label className="est-rate">%<input inputMode="decimal" value={cont} onChange={e => setCont(e.target.value)} /></label><div className="est-amt">{inr(c)}</div></div>
-        <div className="est-row total"><div className="est-name"><strong>Estimated total</strong><small>≈ {inr(total / (est.built_up_m2 || 1))} per m² built-up</small></div><div className="est-qty" /><div /><div className="est-amt">{inr(total)}</div></div>
+        <div className="est-row total"><div className="est-name"><strong>Estimated total</strong><small>≈ {inr(total / ((est.built_up_m2 * 10.7639) || 1))} per sq ft · {inr(total / (est.built_up_m2 || 1))} per m² built-up</small></div><div className="est-qty" /><div /><div className="est-amt">{inr(total)}</div></div>
       </div>
       <div className="row"><button className="btn" onClick={() => download(`/projects/${full.project.id}/estimate.xlsx?cont=${encodeURIComponent(cont)}&rates=${encodeURIComponent(JSON.stringify(Object.fromEntries(Object.entries(rates).map(([k, v]) => [k, parseFloat(v) || 0]))))}`, `${full.project.name}-BOQ-rev${est.revision}.xlsx`)}>Download Excel (BOQ)</button><button className="btn ghost" onClick={csv}>CSV</button><button className="btn ghost" onClick={() => { const e = est.rates; setRates(Object.fromEntries(Object.entries(e).map(([k, v]) => [k, String(v)]))); }}>Reset rates</button></div>
       <p className="fine">{est.disclaimer}</p>

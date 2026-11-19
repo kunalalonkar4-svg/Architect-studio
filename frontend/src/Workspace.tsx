@@ -3,15 +3,19 @@ import { api, Full } from "./api";
 import BriefPanel from "./BriefPanel";
 import Chat from "./Chat";
 import EstimatePanel from "./EstimatePanel";
+import ReviewPanel from "./ReviewPanel";
+import View3D from "./View3D";
+import SharePanel from "./SharePanel";
+import SitePack from "./SitePack";
 import ExportPanel from "./ExportPanel";
 import Revisions from "./Revisions";
 import Viewer from "./Viewer";
 import { ErrorBox, Notice, Spinner, toNotice, useInterval } from "./ui";
 
-export type Tab = "chat" | "drawing" | "brief" | "estimate" | "revisions" | "export";
+export type Tab = "chat" | "drawing" | "view3d" | "brief" | "estimate" | "review" | "share" | "pack" | "revisions" | "export";
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "chat", label: "Chat", icon: "" }, { id: "drawing", label: "Drawing", icon: "" }, { id: "brief", label: "Brief", icon: "" },
-  { id: "estimate", label: "Estimate", icon: "" }, { id: "revisions", label: "History", icon: "" }, { id: "export", label: "Export", icon: "" },
+  { id: "chat", label: "Chat", icon: "" }, { id: "drawing", label: "Drawing", icon: "" }, { id: "view3d", label: "3D", icon: "" }, { id: "brief", label: "Brief", icon: "" },
+  { id: "review", label: "Review", icon: "" }, { id: "estimate", label: "Estimate", icon: "" }, { id: "pack", label: "Site pack", icon: "" }, { id: "share", label: "Share", icon: "" }, { id: "revisions", label: "History", icon: "" }, { id: "export", label: "Export", icon: "" },
 ];
 
 export function useWide() {
@@ -21,9 +25,10 @@ export function useWide() {
   return w;
 }
 
-export default function Workspace({ pid, onListChanged }: { pid: string; onListChanged: () => void }) {
+export default function Workspace({ pid, onListChanged, onBack }: { pid: string; onListChanged: () => void; onBack: () => void }) {
   const [full, setFull] = useState<Full | null>(null); const [err, setErr] = useState<Notice | null>(null);
-  const [tab, setTab] = useState<Tab>("chat"); const wide = useWide();
+  const [tab, setTabRaw] = useState<Tab>("chat"); const [hist, setHist] = useState<Tab[]>([]); const wide = useWide();
+  const tabRef = useRef<Tab>("chat"); tabRef.current = tab;
   const cur = useRef(pid); cur.current = pid;
 
   const reload = useCallback(async () => {
@@ -31,7 +36,9 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
     try { const r: Full = await api(`/projects/${id}`); if (cur.current === id) { setFull(r); setErr(null); } } catch (e) { if (cur.current === id) setErr(toNotice(e)); }
     onListChanged();
   }, [pid]);
-  useEffect(() => { setFull(null); setErr(null); setTab("chat"); reload(); }, [pid]);
+  const setTab = (t: Tab) => { if (t === tabRef.current) return; setHist(h => [...h.slice(-19), tabRef.current]); setTabRaw(t); };
+  useEffect(() => { setFull(null); setErr(null); setTabRaw("chat"); setHist([]); reload(); }, [pid]);
+  const goBack = () => { if (hist.length) { const t = hist[hist.length - 1]; setHist(h => h.slice(0, -1)); setTabRaw(t); } else onBack(); };
 
   const active = !!full && (full.current?.render_status === "pending" || full.current?.render_status === "running" || full.jobs.some(j => j.state === "queued" || j.state === "running"));
   const sig = (x: { render_status: string | null; jobs: { id: string; state: string; progress: number }[] }) => x.render_status + "|" + x.jobs.map(j => j.id + j.state + Math.round(j.progress * 20)).join(",");
@@ -54,6 +61,10 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
     <div className="rightpane" role="tabpanel" id="pane" aria-label={rt}>
       {rt === "drawing" && <Viewer full={full} reload={reload} />}
       {rt === "brief" && <BriefPanel full={full} reload={reload} goTab={goTab} />}
+      {rt === "view3d" && <View3D full={full} />}
+      {rt === "review" && <ReviewPanel full={full} />}
+      {rt === "share" && <SharePanel full={full} />}
+      {rt === "pack" && <SitePack full={full} />}
       {rt === "estimate" && <EstimatePanel full={full} />}
       {rt === "revisions" && <Revisions full={full} reload={reload} goTab={goTab} />}
       {rt === "export" && <ExportPanel full={full} reload={reload} />}
@@ -72,6 +83,7 @@ export default function Workspace({ pid, onListChanged }: { pid: string; onListC
   return (
     <div className="workspace">
       <header className="wshead">
+        <button className="btn ghost sm back" onClick={goBack} aria-label={hist.length ? "Back to previous section" : "Back to projects"}>← Back</button>
         <div className="ptitle"><strong>{full.project.name}</strong>
           <small>{full.current ? `Revision ${full.current.number}` : "No drawing yet"} · {full.project.review_status === "concept_unreviewed" ? "Concept — not reviewed" : "Issued for owner’s review"}</small></div>
         <div className={"aibadge " + (full.ai.live ? "live" : "mock")} title={full.ai.message || `Model ${full.ai.model}`}>{full.ai.live ? "Claude" : "Demo mode"}</div>

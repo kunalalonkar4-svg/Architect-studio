@@ -38,6 +38,7 @@ SHEET_KINDS = {
     "section": ("A-301", "Sections", 50),
     "schedules": ("A-401", "Schedules", 0),
     "structure": ("S-101", "Structural Layout (Preliminary)", 100),
+    "mep": ("M-101", "MEP Concept Layout", 100),
 }
 KIND_ORDER = list(SHEET_KINDS)
 
@@ -69,6 +70,11 @@ def ensure_sheet(model: ProjectModel, kind: str, paper: str | None = None, scale
     elif kind in ("site", "roof", "structure"):
         vid = f"v-{kind}"
         _put_view(model, ViewDef(id=vid, type=kind, level=model.levels[-1].id if kind == "roof" else "GF")); vids = [vid]
+    elif kind == "mep":
+        for lv in model.levels:
+            for disc in ("electrical", "plumbing"):
+                vid = f"v-mep-{disc[0]}-{lv.id}"
+                _put_view(model, ViewDef(id=vid, type="mep", level=lv.id, discipline=disc)); vids.append(vid)
     elif kind == "elevations":
         fs = [facing_of(model, f) for f in (facings or ["front", "rear", "left", "right"])]
         for f in dict.fromkeys(fs):
