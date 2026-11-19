@@ -59,7 +59,7 @@ def current_revision(ctx: Ctx):
 def execute_tool(ctx: Ctx, name: str, raw: dict) -> Outcome:
     if name not in MODELS:                       # allow-list
         return err("unknown_operation", f"Operation '{name}' is not allowed.")
-    if ctx.project.status == "archived" and name not in ("explain_validation", "ask_clarification", "get_quantities"):
+    if ctx.project.status == "archived" and name not in ("explain_validation", "ask_clarification", "get_quantities", "get_review"):
         return err("project_archived", "This project is archived and read-only.", ["Unarchive the project to continue"])
     try:
         args = MODELS[name].model_validate(raw)
@@ -419,6 +419,16 @@ def op_get_quantities(ctx: Ctx, a) -> Outcome:
         return err("no_model_yet", "There is no drawing yet, so quantities cannot be computed.")
     model = ProjectModel.model_validate(rev.model)
     return Outcome(dict(ok=True, revision=rev.number, estimate=estimate(model), structural_preliminary=prelim(model)), [dict(type="info", message="Quantities and preliminary structural sizes are in the Estimate tab.")])
+
+
+def op_get_review(ctx: Ctx, a) -> Outcome:
+    from ..engine.review import review
+    rev = current_revision(ctx)
+    if not rev:
+        return err("no_model_yet", "There is no drawing yet, so there is nothing to review.")
+    model = ProjectModel.model_validate(rev.model)
+    r = review(model, far_max=a.far_max, coverage_max_pct=a.coverage_max_pct, height_max_m=a.height_max_m, latitude=a.latitude)
+    return Outcome(dict(ok=True, revision=rev.number, review=r), [dict(type="info", message="The same checks are in the Review tab.")])
 
 
 def op_explain_validation(ctx: Ctx, a) -> Outcome:

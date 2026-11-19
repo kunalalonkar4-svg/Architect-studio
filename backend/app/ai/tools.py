@@ -152,9 +152,16 @@ class GetQuantities(Strict):
     pass
 
 
+class GetReview(Strict):
+    far_max: Optional[float] = None            # only values the user gave, from their local rules
+    coverage_max_pct: Optional[float] = None
+    height_max_m: Optional[float] = None
+    latitude: Optional[float] = None
+
+
 MODELS = {"update_brief": UpdateBrief, "ask_clarification": AskClarification, "generate_layout": GenerateLayout,
           "propose_options": ProposeOptions, "propose_edit": ProposeEdit, "generate_views": GenerateViews,
-          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities,
+          "request_export": RequestExport, "explain_validation": ExplainValidation, "get_quantities": GetQuantities, "get_review": GetReview,
           "design_floor_plan": DesignFloorPlan}
 TEMPLATE_ONLY = {"generate_layout", "propose_options"}   # fixed-template tools, kept for the offline demo provider only
 
@@ -173,6 +180,9 @@ DESCRIPTIONS = {
                           "every room must be reachable from entry_room via 'door' (needs >= 1100 mm shared wall) or 'open' (no wall, >= 600 mm) connections; bedrooms, living, kitchen and study need an outside wall for a window; "
                           "two floors need a room of kind 'stair' with the identical rectangle on both floors (>= 2300 x 3000 mm for the dog-leg stair). Name first-floor keys with an f_ prefix. "
                           "WORKFLOW: call with final=false first; the server returns a drawing image of your plan with room sizes and a review checklist, but saves nothing. Review it critically, fix and re-preview as needed, then call with final=true and the identical plan to save it (server refuses final=true for a plan you have not previewed). If a design already exists, final=true creates a proposal the user confirms. If the server returns problems, fix them and call again."),
+    "get_review": ("Run the design checks on the active revision: planning limits (only against FAR, ground coverage and height values the user has given you from their local rules; never invent limits), "
+                   "Vastu score with a reason for each mark, light and ventilation by room, sun hours on each wall (pass latitude only if the user gave their city or latitude), and the column grid with long spans. "
+                   "Use these numbers when the user asks whether the plan is Vastu-compliant, well lit, within limits or structurally sensible; Vastu is traditional guidance, not a rule."),
     "get_quantities": "Read the computed material quantities, placeholder-rate cost lines and PRELIMINARY structural sizes for the active revision. Use these numbers when the user asks about cost, BOQ, materials, beam/column/footing sizes; never invent quantities.",
 }
 

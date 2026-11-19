@@ -215,3 +215,19 @@ def test_model3d_endpoint_returns_geometry_and_is_private(client, auth):
     assert d["walls"] and d["spaces"] and d["levels"] and d["openings"] and d["plot"]["w"] > 0
     assert all(set(w) >= {"x1", "y1", "x2", "y2", "t", "level"} for w in d["walls"])
     assert client.get(f"/api/projects/{pid}/model3d", headers=make_user(client, "Ravi")).status_code == 404
+
+
+def test_chat_get_review_tool_reads_the_same_checks(client, auth):
+    from test_acceptance_2_3 import make_project
+    from app.ai.ops import Ctx, execute_tool
+    from app.ai.tools import anthropic_tools
+    from app.db import SessionLocal
+    from app.models import Project, User
+    pid = make_project(client, auth, views=None)
+    assert any(t["name"] == "get_review" for t in anthropic_tools())
+    with SessionLocal() as db:
+        p = db.get(Project, pid)
+        out = execute_tool(Ctx(db, p, db.get(User, p.owner_id)), "get_review", dict(far_max=1.5))
+        assert out.result["ok"] and "vastu" in out.result["review"] and out.result["review"]["planning"]
+        bad = execute_tool(Ctx(db, p, db.get(User, p.owner_id)), "get_review", dict(unknown=1))
+        assert bad.is_error
