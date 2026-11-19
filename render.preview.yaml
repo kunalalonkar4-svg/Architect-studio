@@ -1,0 +1,30 @@
+# Preview of the feature branch: its own service and database, separate from the live site.
+databases:
+  - name: drafta-preview-db
+    plan: free
+    region: oregon
+    databaseName: drafta_preview_db
+    user: drafta_preview_db_user
+services:
+  - type: web
+    name: drafta-preview
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: feature/review-engine
+    region: oregon
+    plan: free
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: drafta-preview-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_DEMO
+        value: "1"
+      - key: STORAGE_BACKEND
+        value: db
+      - key: AI_PROVIDER
+        value: mock
