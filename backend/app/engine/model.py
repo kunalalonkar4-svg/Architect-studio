@@ -43,6 +43,7 @@ class Brief(BaseModel):
     notes: str = ""
     assumptions: list[Assumption] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)  # user-supplied planning constraints, verbatim
+    plot_polygon_mm: Optional[list[list[float]]] = None   # irregular convex plot corners (x east, y north); width/depth come from these
     dims_assumed_orientation: bool = False   # "30 by 50" -> first number taken along the road
 
     def missing(self) -> list[dict]:

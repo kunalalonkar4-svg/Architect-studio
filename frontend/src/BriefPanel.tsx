@@ -1,3 +1,4 @@
+import PlotShape from "./PlotShape";
 import { useEffect, useState } from "react";
 import { api, Full } from "./api";
 import { ErrorBox, Notice, toNotice } from "./ui";
@@ -77,6 +78,7 @@ export default function BriefPanel({ full, reload, goTab }: { full: Full; reload
         <div className="grid2"><Len k="frontage" label="Frontage (along road)" /><Len k="depth" label="Depth" /></div>
         <label>Road is on the<select value={f.road} onChange={e => set("road", e.target.value)}><option value="">Choose…</option>{["north", "east", "south", "west"].map(s => <option key={s}>{s}</option>)}</select></label>
       </fieldset>
+      {!ro && <PlotShape full={full} reload={reload} goTab={goTab} />}
       <fieldset disabled={ro}><legend>Required open space / setbacks</legend>
         <small className="muted">Enter values from your local rules. If you leave them blank you can proceed with labelled concept assumptions.</small>
         <div className="grid2"><Len k="front" label="Front" /><Len k="rear" label="Rear" /><Len k="left" label="Left" /><Len k="right" label="Right" /></div>

@@ -307,6 +307,44 @@ def put_brief(pid: str, b: UpdateBrief, u: User = Depends(current_user), db: Ses
     return run_op(db, u, p, "update_brief", b.model_dump(exclude_none=True))
 
 
+class PlotShapeIn(BaseModel):
+    points_mm: Optional[list[list[float]]] = None    # corners (x east, y north) in millimetres; omit with clear=true to go back to a rectangle
+    clear: bool = False
+
+
+@router.put("/projects/{pid}/plot-shape")
+def plot_shape(pid: str, b: PlotShapeIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Irregular convex plot from corner points. With a drawing already made, the change comes back as a proposal to confirm."""
+    from ..engine.layout import ImpossibleLayout
+    from ..engine.plotshape import frontage_depth, normalise
+    p = owned_project(db, u, pid)
+    brief = Brief.model_validate(p.brief or {})
+    if b.clear:
+        fields = dict(plot_polygon_mm=None)
+    else:
+        if not b.points_mm:
+            return svc_error(ServiceError("no_points", "Enter the plot corners.", ["Add at least three corners"], status=422))
+        if not brief.road_side:
+            return svc_error(ServiceError("road_side_first", "Say which side faces the road before entering the plot corners.", ["Set the road side in the brief"], status=422))
+        try:
+            pts = normalise(b.points_mm)
+        except ImpossibleLayout as e:
+            return svc_error(ServiceError("bad_plot_shape", "; ".join(e.reasons), e.suggestions, status=422))
+        fr, dp = frontage_depth(pts, brief.road_side)
+        fields = dict(plot_polygon_mm=pts, plot_frontage_mm=fr, plot_depth_mm=dp)
+    rev = db.get(Revision, p.current_revision_id) if p.current_revision_id else None
+    if rev:
+        out = aiops._make_edit_proposal(aiops.Ctx(db, p, u), rev, [dict(op="set_brief", fields=fields)], [], "Change the plot shape")
+        if not out.is_error and out.result.get("proposal_id"):
+            db.add(Message(project_id=p.id, role="system", content="Plot shape change is ready to review.", events=[dict(type="proposal", proposal_id=out.result["proposal_id"])]))
+        db.commit()
+        return JSONResponse(dict(ok=not out.is_error, result=out.result), status_code=422 if out.is_error else 200)
+    for k, v in fields.items():
+        setattr(brief, k, v)
+    p.brief = brief.model_dump(); db.commit()
+    return dict(ok=True, brief=brief.model_dump(), missing=brief.missing())
+
+
 class GenerateIn(BaseModel):
     use_assumptions: bool = False
     stair_position: Optional[str] = None

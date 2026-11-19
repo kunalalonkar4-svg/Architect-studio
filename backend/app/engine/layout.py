@@ -51,7 +51,7 @@ def stair_flight(w: float, h: float, level_h: float) -> StairFlight:
                        flight_width=round(fw, 1), landing=round(fw, 1), clear_w=clear_short, clear_len=clear_long)
 
 
-def effective_setbacks(brief: Brief, use_assumptions: bool):
+def _raw_setbacks(brief: Brief, use_assumptions: bool):
     sb = {"front": brief.setbacks.front, "rear": brief.setbacks.rear,
           "left": brief.setbacks.left, "right": brief.setbacks.right}
     source, assumptions = {}, []
@@ -65,6 +65,37 @@ def effective_setbacks(brief: Brief, use_assumptions: bool):
         else:
             source[k] = "user"
     return sb, source, assumptions
+
+
+def _polygon_fit(brief: Brief, use_assumptions: bool):
+    from .plotshape import fit
+    sb, source, asm = _raw_setbacks(brief, use_assumptions)
+    return fit(brief.plot_polygon_mm, brief.road_side, sb), sb, source, asm
+
+
+def effective_setbacks(brief: Brief, use_assumptions: bool):
+    """(setbacks the engine uses, where each came from, assumptions). For an irregular plot the engine's setbacks are the margins from
+    the plot's bounding box to the largest rectangle that fits inside the plot after your open space values."""
+    if not (brief.plot_polygon_mm and brief.road_side):
+        return _raw_setbacks(brief, use_assumptions)
+    f, sb, source, asm = _polygon_fit(brief, use_assumptions)
+    fr, dp = f["bbox"][1], f["bbox"][0]
+    if brief.road_side in ("n", "s"):
+        fr, dp = f["bbox"][0], f["bbox"][1]
+    if not (brief.plot_frontage_mm and brief.plot_depth_mm) or abs(brief.plot_frontage_mm - fr) > 2 or abs(brief.plot_depth_mm - dp) > 2:
+        raise ImpossibleLayout([f"Plot width/depth ({brief.plot_frontage_mm} x {brief.plot_depth_mm} mm) does not match the plot corners (bounding box {fr:.0f} x {dp:.0f} mm)"],
+                               ["Re-enter the plot corners so the size is updated", "Or remove the plot shape and use a rectangle"])
+    asm = asm + [Assumption(id="irregular_plot", kind="derived", text=(
+        f"Irregular plot ({len(f['polygon'])} corners, {f['area_plot'] / 1e6:.1f} m²). The house is fitted in the largest rectangle inside the plot after your open-space values; "
+        "side margins shown are measured to the plot's bounding box. Boundary angles and lengths come only from the corners you entered, not a survey."))]
+    return f["margins"], source, asm
+
+
+def attach_plot_shape(model, brief: Brief, use_assumptions: bool):
+    """Record the real boundary on the model so the site plan can draw it."""
+    if brief.plot_polygon_mm and brief.road_side and model.plot is not None:
+        f, *_ = _polygon_fit(brief, use_assumptions)
+        model.plot.update(polygon=f["polygon"], inset=f["inset"], fit_rect=f["rect"], user_setbacks=f["user_setbacks"], plot_area=f["area_plot"])
 
 
 MAX_BEDROOMS = 5
@@ -224,6 +255,7 @@ def build_model(brief: Brief, params: LayoutParams | None = None, overrides: dic
                                    setbacks=sb, setback_source=source, local_origin=[bx0, by0], bw=BW, bd=BD),
                          levels=levels, spaces=spaces, params=p, opening_overrides=dict(overrides or {}),
                          assumptions=list(brief.assumptions) + asm, roof_approved=roof_approved)
+    attach_plot_shape(model, brief, use_assumptions)
     # openings (local description -> world)
     def S(key): return next(d for d in L if d["key"] == key)
     ops: list[dict] = []

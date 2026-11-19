@@ -496,7 +496,11 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     pl = model.plot
     PW, PH = pl["w"], pl["h"]
     ob = model.outer_bounds()
-    b.rect(0, 0, PW, PH, "A-SITE-BNDY", None, w=0.5)
+    poly = pl.get("polygon")
+    if poly:
+        b.poly([tuple(p) for p in poly], "A-SITE-BNDY", True, None, "cont", 0.5)
+    else:
+        b.rect(0, 0, PW, PH, "A-SITE-BNDY", None, w=0.5)
     sbk = pl["setbacks"]; src = pl["setback_source"]
     rs = pl["road_side"]
     # setback lines (front is road side)
@@ -507,7 +511,10 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     sbw = {by_world[k]: v for k, v in sbk.items()}
     srcw = {by_world[k]: src[k] for k in sbk}
     L, Rr, Bm, T = sbw["left"], sbw["right"], sbw["bottom"], sbw["top"]
-    b.rect(L, Bm, PW - Rr, PH - T, "A-SITE-SETB", None, "dash")
+    if poly and pl.get("inset"):
+        b.poly([tuple(p) for p in pl["inset"]], "A-SITE-SETB", True, None, "dash")
+    else:
+        b.rect(L, Bm, PW - Rr, PH - T, "A-SITE-SETB", None, "dash")
     # building footprint
     b.rect(ob[0], ob[1], ob[2], ob[3], "A-SITE-BLDG", "light", w=0.4)
     fp = model.footprint()
@@ -516,7 +523,7 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
             b.rect(s.x, s.y, s.x2, s.y2, "A-SITE-MISC", None, "dash")
             b.text(s.x + s.w / 2, s.y + s.h / 2, s.name.upper(), 2.0, "A-SITE-MISC", "c", "m")
     b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2, "PROPOSED BUILDING (GROUND FLOOR)" if len(model.levels) == 1 else f"PROPOSED BUILDING (G+{len(model.levels) - 1}, GROUND FLOOR FOOTPRINT)", 2.4, "A-ANNO-TEXT", "c", "m", bold=True)
-    b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2 - b.p(3.5), f"Footprint {(ob[2]-ob[0])*(ob[3]-ob[1])/1e6:.1f} m²  |  Plot {PW*PH/1e6:.1f} m²  |  Coverage {(ob[2]-ob[0])*(ob[3]-ob[1])/(PW*PH)*100:.0f}%", 1.9, "A-ANNO-TEXT", "c", "m")
+    b.text((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2 - b.p(3.5), f"Footprint {(ob[2]-ob[0])*(ob[3]-ob[1])/1e6:.1f} m²  |  Plot {(pl.get('plot_area') or PW*PH)/1e6:.1f} m²  |  Coverage {(ob[2]-ob[0])*(ob[3]-ob[1])/(pl.get('plot_area') or PW*PH)*100:.0f}%", 1.9, "A-ANNO-TEXT", "c", "m")
     # road strip on the road side
     rd = b.p(12)
     if rs == "s":
@@ -528,18 +535,19 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     else:
         b.rect(-rd - b.p(4), -b.p(8), -b.p(4), PH + b.p(8), "A-SITE-MISC", "light"); b.text(-rd / 2 - b.p(4), PH / 2, "ROAD (width not surveyed)", 2.2, "A-SITE-MISC", "c", "m", rot=90)
     # open-space dims
+    def tag(k): return 'to box' if poly else srcw[k]
     def lab(v, s): return f"{v:.0f} ({'user' if s == 'user' else 'assumed'})"
     mx, my = (ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2
     b.dim_v(0, ob[1], mx, mx, lab(Bm, srcw["bottom"])) if False else None
     b.dim_v(0, ob[1], mx - b.p(0), mx, lab(Bm, srcw["bottom"])) if False else None
-    if Bm > 0: b.dim_v(0, ob[1], mx, mx, lab(ob[1], srcw["bottom"]) if False else f"{ob[1]:.0f} {srcw['bottom']}")
-    if T > 0: b.dim_v(ob[3], PH, mx, mx, f"{PH - ob[3]:.0f} {srcw['top']}")
-    if L > 0: b.dim_h(0, ob[0], my, my, f"{ob[0]:.0f} {srcw['left']}")
-    if Rr > 0: b.dim_h(ob[2], PW, my, my, f"{PW - ob[2]:.0f} {srcw['right']}")
+    if Bm > 0: b.dim_v(0, ob[1], mx, mx, lab(ob[1], srcw["bottom"]) if False else f"{ob[1]:.0f} {tag('bottom')}")
+    if T > 0: b.dim_v(ob[3], PH, mx, mx, f"{PH - ob[3]:.0f} {tag('top')}")
+    if L > 0: b.dim_h(0, ob[0], my, my, f"{ob[0]:.0f} {tag('left')}")
+    if Rr > 0: b.dim_h(ob[2], PW, my, my, f"{PW - ob[2]:.0f} {tag('right')}")
     # plot dims outside
     off = b.p(18) if rs != "s" else b.p(18)
-    b.dim_h(0, PW, PH, PH + b.p(10) if rs != "n" else PH + b.p(26), f"{PW:.0f}  ({fmt_ft_in(PW)})")
-    b.dim_v(0, PH, 0, -b.p(10) if rs != "w" else -b.p(26), f"{PH:.0f}  ({fmt_ft_in(PH)})")
+    b.dim_h(0, PW, PH, PH + b.p(10) if rs != "n" else PH + b.p(26), f"{PW:.0f}  ({fmt_ft_in(PW)})" + (" bounding box" if poly else ""))
+    b.dim_v(0, PH, 0, -b.p(10) if rs != "w" else -b.p(26), f"{PH:.0f}  ({fmt_ft_in(PH)})" + (" bounding box" if poly else ""))
     for k, nm in (("bottom", "S"), ("top", "N")):
         pass
     # open area labels
@@ -549,6 +557,8 @@ def site_view(model: ProjectModel, vd: ViewDef, S: int, project: dict) -> ViewRe
     b.text(0, -b.p(36) if rs != "s" else -rd - b.p(24), "Vehicular / pedestrian access: from the road frontage (gate position to be confirmed by the owner).", 1.9, valign="t")
     b.north_arrow(PW + b.p(30) if rs != "e" else PW + rd + b.p(30), PH + b.p(4))
     b.scale_bar(0, -b.p(60) if rs != "s" else -rd - b.p(44), S)
+    if poly:
+        b.text(0, -b.p(42) if rs != "s" else -rd - b.p(29), "Irregular plot from entered corners (not a survey). 'to box' = distance to the plot's bounding box; dashed line = your open space inside the boundary.", 1.9, valign="t")
     b.text(0, -b.p(50) if rs != "s" else -rd - b.p(34), "Setback / open-space values: 'user' = supplied by the user, 'assumed' = concept assumption, verify with local authority rules.", 1.9, valign="t")
     meta = dict(plot=[PW, PH], footprint=[ob[2] - ob[0], ob[3] - ob[1]], setbacks=sbk, source=src)
     return ViewResult(vd.id, "SITE PLAN", b.prims, bbox_of(b.prims, S), S, meta)
