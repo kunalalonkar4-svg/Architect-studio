@@ -54,7 +54,7 @@ export default function Landing({ onAuthed }: { onAuthed: (u: User, ai: AiStatus
       <header className="lp-nav">
         <a className="lp-brand" href="#top"><span className="logo-mark" aria-hidden /> Drafta</a>
         <nav className={menu ? "open" : ""} aria-label="Sections" onClick={() => setMenu(false)}>
-          <a href="#features">Features</a><a href="#set">Drawing set</a><a href="#how">How it works</a><a href="#limits">Limits</a>
+          <a href="#/sample">Try a sample</a><a href="#features">Features</a><a href="#set">Drawing set</a><a href="#how">How it works</a><a href="#limits">Limits</a>
           <button className="lp-link" onClick={go}>Sign in</button>
         </nav>
         <button className="lp-menu" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}><span /><span /></button>

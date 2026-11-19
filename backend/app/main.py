@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import jobs
 from .api.routes import router
+from .api.share import router as share_router
 from .config import settings
 from .db import Base, engine
 
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AI Architect Studio", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"], allow_credentials=False)
 app.include_router(router)
+app.include_router(share_router)
 
 
 @app.exception_handler(Exception)

@@ -160,3 +160,45 @@ class AIUsage(Base):
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+
+class ShareLink(Base):
+    """Read-only link to one revision of a project. The token is the only credential; revoking it kills the link."""
+    __tablename__ = "share_links"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    revision_id: Mapped[str] = mapped_column(String(36))
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    allow_comments: Mapped[bool] = mapped_column(Boolean, default=True)
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    share_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    revision_id: Mapped[str] = mapped_column(String(36))
+    sheet_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    author: Mapped[str] = mapped_column(String(80))
+    from_owner: Mapped[bool] = mapped_column(Boolean, default=False)
+    body: Mapped[str] = mapped_column(Text)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ReviewRequest(Base):
+    """A note that the owner wants a licensed professional to review this revision. Nothing is assigned automatically."""
+    __tablename__ = "review_requests"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    revision_id: Mapped[str] = mapped_column(String(36))
+    kind: Mapped[str] = mapped_column(String(20))            # architect|structural|mep
+    reviewer_name: Mapped[str] = mapped_column(String(200), default="")
+    reviewer_contact: Mapped[str] = mapped_column(String(300), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="requested")   # requested|sent|reviewed|cancelled (owner-maintained)
+    outcome_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)

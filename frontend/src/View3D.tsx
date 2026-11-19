@@ -140,8 +140,8 @@ function draw(ctx: CanvasRenderingContext2D, W: number, H: number, items: Item[]
   }
 }
 
-export default function View3D({ full }: { full: Full }) {
-  const pid = full.project.id; const revId = full.current?.id;
+export default function View3D({ full, src }: { full?: Full; src?: string }) {
+  const pid = full?.project.id; const revId = src ?? full?.current?.id;
   const [m, setM] = useState<M3 | null>(null); const [err, setErr] = useState<Notice | null>(null);
   const [walk, setWalk] = useState(false);
   const cv = useRef<HTMLCanvasElement>(null); const cam = useRef<Cam>({ yaw: -0.7, pitch: 0.5, dist: 20000, tx: 0, ty: 0, tz: 1500, walk: false, px: 0, py: 0 });
@@ -150,9 +150,9 @@ export default function View3D({ full }: { full: Full }) {
   useEffect(() => {
     if (!revId) { setM(null); return; }
     let off = false; setErr(null);
-    api<M3>(`/projects/${pid}/model3d`).then(x => { if (!off) setM(x); }).catch(e => !off && setErr(toNotice(e)));
+    api<M3>(src ?? `/projects/${pid}/model3d`).then(x => { if (!off) setM(x); }).catch(e => !off && setErr(toNotice(e)));
     return () => { off = true; };
-  }, [pid, revId]);
+  }, [pid, revId, src]);
 
   useEffect(() => {
     if (!m) return;
@@ -204,7 +204,7 @@ export default function View3D({ full }: { full: Full }) {
     setWalk(next);
   }
 
-  if (!full.current) return <div className="empty-pane"><h3>No 3D view yet</h3><p className="muted">Generate the drawings first. The 3D view uses the same model.</p></div>;
+  if (!src && !full?.current) return <div className="empty-pane"><h3>No 3D view yet</h3><p className="muted">Generate the drawings first. The 3D view uses the same model.</p></div>;
   if (err) return <div className="panel"><ErrorBox n={err} /></div>;
   if (!m) return <div className="empty-pane"><Spinner label="Building the 3D view…" /></div>;
   return (

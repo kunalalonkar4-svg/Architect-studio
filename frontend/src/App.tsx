@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, AiStatus, getToken, User } from "./api";
 import Landing from "./Landing";
+import PublicView, { parseHash } from "./PublicView";
 import Settings from "./Settings";
 import Sidebar from "./Sidebar";
 import Workspace, { useWide } from "./Workspace";
@@ -12,8 +13,12 @@ export default function App() {
   const [pid, setPid] = useState<string | null>(() => { try { return localStorage.getItem("drafta.pid"); } catch { return null; } });
   const [key, setKey] = useState(0); const [settings, setSettings] = useState(false); const [drawer, setDrawer] = useState(false);
   const wide = useWide();
+  const [hash, setHash] = useState(() => location.hash);
+  useEffect(() => { const f = () => setHash(location.hash); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  const pub = parseHash(hash);
   useEffect(() => { if (!getToken()) return; api("/auth/me").then(r => { setUser(r.user); setAi(r.ai); }).catch(() => undefined).finally(() => setBooting(false)); }, []);
   useEffect(() => { try { pid ? localStorage.setItem("drafta.pid", pid) : localStorage.removeItem("drafta.pid"); } catch { /* ignore */ } }, [pid]);
+  if (pub) return <PublicView route={pub} />;
   if (booting) return <div className="pane-center"><Spinner label="Starting…" /></div>;
   if (!user || !ai) return <Landing onAuthed={(u, a) => { setUser(u); setAi(a); }} />;
   const bump = () => setKey(k => k + 1);
